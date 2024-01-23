@@ -1,0 +1,51 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>Physics_Items</AssemblyName>
+    <Description>My first plugin</Description>
+    <Version>0.1.0</Version>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+		<PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.1" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.Core" Version="5.*" />
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="1.*" />
+    <PackageReference Include="UnityEngine.Modules" Version="2022.3.9" IncludeAssets="compile" />
+  </ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="Assembly-CSharp" Publicize="true">
+			<HintPath>$(LETHAL_COMPANY_DIR)/Lethal Company_Data/Managed/Assembly-CSharp.dll</HintPath>
+		</Reference>
+		<Reference Include="Unity.Netcode.Runtime">
+			<HintPath>$(LETHAL_COMPANY_DIR)/Lethal Company_Data/Managed/Unity.Netcode.Runtime.dll</HintPath>
+		</Reference>
+		<Reference Include="Facepunch.Steamworks.Wins64">
+			<HintPath>$(LETHAL_COMPANY_DIR)/Lethal Company_Data/Managed/Facepunch.Steamworks.Win64.dll</HintPath>
+		</Reference>
+		<Reference Include="Unity.Netcode.Runtime">
+			<HintPath>$(LETHAL_COMPANY_DIR)/Lethal Company_Data/Managed/Unity.Netcode.Components.dll</HintPath>
+		</Reference>
+		<Reference Include="MMHOOK_Assembly-CSharp">
+			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/MMHOOK/MMHOOK_Assembly-CSharp.dll</HintPath>
+		</Reference>
+		<Reference Include="Spantle.ThrowEverything" Publicize="true">
+			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/Spantle-ThrowEverything/Spantle.ThrowEverything.dll</HintPath>
+		</Reference>
+	</ItemGroup>
+	
+	<!-- make all references non-private, so they won't be copied to the output folder -->
+	<Target Name="ClearReferenceCopyLocalPaths" AfterTargets="ResolveAssemblyReferences">
+		<ItemGroup>
+			<ReferenceCopyLocalPaths Remove="@(ReferenceCopyLocalPaths)" />
+		</ItemGroup>
+	</Target>
+  
+  <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all" />
+  </ItemGroup>
+</Project>
