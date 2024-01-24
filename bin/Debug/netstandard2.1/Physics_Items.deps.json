@@ -7,7 +7,7 @@
   "targets": {
     ".NETStandard,Version=v2.1": {},
     ".NETStandard,Version=v2.1/": {
-      "Physics_Items/0.1.0": {
+      "Physics_Items/0.1.1": {
         "dependencies": {
           "BepInEx.Analyzers": "1.0.8",
           "BepInEx.AssemblyPublicizer.MSBuild": "0.4.1",
@@ -18,6 +18,7 @@
           "MMHOOK_Assembly-CSharp": "0.0.0.0",
           "Unity.Netcode.Components": "0.0.0.0",
           "Unity.Netcode.Runtime": "0.0.0.0",
+          "AdvancedCompany": "0.0.0.0",
           "Assembly-CSharp": "0.0.0.0",
           "Spantle.ThrowEverything": "0.3.0.0"
         },
@@ -419,6 +420,14 @@
           }
         }
       },
+      "AdvancedCompany/0.0.0.0": {
+        "runtime": {
+          "AdvancedCompany.dll": {
+            "assemblyVersion": "0.0.0.0",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
       "Assembly-CSharp/0.0.0.0": {
         "runtime": {
           "Assembly-CSharp.dll": {
@@ -587,6 +596,22 @@
           }
         }
       },
+      "MoreCompany/100.0.0.0": {
+        "runtime": {
+          "MoreCompany.dll": {
+            "assemblyVersion": "100.0.0.0",
+            "fileVersion": "100.0.0.0"
+          }
+        }
+      },
+      "Newtonsoft.Json/13.0.0.0": {
+        "runtime": {
+          "Newtonsoft.Json.dll": {
+            "assemblyVersion": "13.0.0.0",
+            "fileVersion": "13.0.2.0"
+          }
+        }
+      },
       "Unity.VisualEffectGraph.Runtime/0.0.0.0": {
         "runtime": {
           "Unity.VisualEffectGraph.Runtime.dll": {
@@ -675,14 +700,6 @@
           }
         }
       },
-      "Newtonsoft.Json/13.0.0.0": {
-        "runtime": {
-          "Newtonsoft.Json.dll": {
-            "assemblyVersion": "13.0.0.0",
-            "fileVersion": "13.0.2.0"
-          }
-        }
-      },
       "Unity.Profiling.Core/0.0.0.0": {
         "runtime": {
           "Unity.Profiling.Core.dll": {
@@ -694,7 +711,7 @@
     }
   },
   "libraries": {
-    "Physics_Items/0.1.0": {
+    "Physics_Items/0.1.1": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
@@ -992,6 +1009,11 @@
       "serviceable": false,
       "sha512": ""
     },
+    "AdvancedCompany/0.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
     "Assembly-CSharp/0.0.0.0": {
       "type": "reference",
       "serviceable": false,
@@ -1097,6 +1119,16 @@
       "serviceable": false,
       "sha512": ""
     },
+    "MoreCompany/100.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Newtonsoft.Json/13.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
     "Unity.VisualEffectGraph.Runtime/0.0.0.0": {
       "type": "reference",
       "serviceable": false,
@@ -1148,11 +1180,6 @@
       "sha512": ""
     },
     "Unity.Services.Core/0.0.0.0": {
-      "type": "reference",
-      "serviceable": false,
-      "sha512": ""
-    },
-    "Newtonsoft.Json/13.0.0.0": {
       "type": "reference",
       "serviceable": false,
       "sha512": ""

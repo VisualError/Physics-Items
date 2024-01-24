@@ -1,29 +1,34 @@
 ﻿using BepInEx;
 using BepInEx.Bootstrap;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using Physics_Items.ModCompatFixes;
 using Physics_Items.NamedMessages;
 using Physics_Items.Physics;
-using System.Collections;
+using Physics_Items.Utils;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
-using UnityEngine.Assertions.Must;
 
 namespace Physics_Items
 {
     [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
     [BepInProcess("lethal company.exe")]
-    [BepInDependency("Spantle.ThrowEverything", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("Spantle.ThrowEverything", BepInDependency.DependencyFlags.SoftDependency)] // Idk how to add hookgen patcher as a dep.
+    [BepInDependency("com.potatoepet.AdvancedCompany", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         internal static new ManualLogSource Logger;
         internal static Plugin Instance;
         internal bool Initialized = false;
         internal bool ServerHasMod = false;
-        private readonly Harmony Harmony = new(PluginInfo.PLUGIN_GUID);
+        internal HashSet<Type> manualSkipList = new HashSet<Type>();
+        internal ConfigEntry<bool> useSourceSounds;
+        internal readonly Harmony Harmony = new(PluginInfo.PLUGIN_GUID);
 
         internal HashSet<GrabbableObject> skipObject = new HashSet<GrabbableObject>();
         private void Awake()
@@ -32,15 +37,25 @@ namespace Physics_Items
                 Instance = this;
             Logger = base.Logger; // So other files can access Plugin.Instance.Logger.
             // Plugin startup logic
-            Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded! PHYSICS");
+            Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
+            AssetLoader.LoadAssetBundles();
+
+            #region "Configs"
+            useSourceSounds = Config.Bind("Fun", "Use Source Engine Collision Sounds", true, "Use source rigidbody sounds.");
+            #endregion
 
             #region "Harmony Patches"
             Harmony.PatchAll(typeof(ModCheck));
             Harmony.PatchAll(typeof(OnCollision));
-            if(Chainloader.PluginInfos.TryGetValue("Spantle.ThrowEverything", out BepInEx.PluginInfo info))
+            if(ThrowEverythingCompatibility.enabled)
             {
-                Harmony.PatchAll(typeof(CompatibilityFixes));
+                ThrowEverythingCompatibility.ApplyFixes();
             }
+            if(AdvancedCompanyCompatibility.enabled)
+            {
+                AdvancedCompanyCompatibility.ApplyFixes();
+            }
+            manualSkipList.Add(typeof(ExtensionLadderItem));
             #endregion
 
             #region "MonoMod Hooks"
@@ -50,10 +65,22 @@ namespace Physics_Items
             On.GrabbableObject.EnablePhysics += GrabbableObject_EnablePhysics;
             On.GrabbableObject.OnPlaceObject += GrabbableObject_OnPlaceObject;
             On.GrabbableObject.ItemActivate += GrabbableObject_ItemActivate;
+            On.GameNetcodeStuff.PlayerControllerB.PlaceGrabbableObject += PlayerControllerB_PlaceGrabbableObject;
             On.GameNetcodeStuff.PlayerControllerB.SetObjectAsNoLongerHeld += PlayerControllerB_SetObjectAsNoLongerHeld;
             On.MenuManager.Awake += MenuManager_Awake;
-            //On.StartOfRound.LoadShipGrabbableItems += StartOfRound_LoadShipGrabbableItems;
+            On.StartOfRound.LoadShipGrabbableItems += StartOfRound_LoadShipGrabbableItems;
             #endregion
+        }
+
+        private void PlayerControllerB_PlaceGrabbableObject(On.GameNetcodeStuff.PlayerControllerB.orig_PlaceGrabbableObject orig, GameNetcodeStuff.PlayerControllerB self, Transform parentObject, Vector3 positionOffset, bool matchRotationOfParent, GrabbableObject placeObject)
+        {
+            orig(self, parentObject, positionOffset, matchRotationOfParent, placeObject);
+            Utils.Physics.GetPhysicsComponent(placeObject.gameObject, out PhysicsComponent physics);
+            if (physics == null) return;
+            physics.isPlaced = true;
+            physics.rigidbody.isKinematic = true;
+            placeObject.gameObject.transform.rotation = Quaternion.Euler(placeObject.itemProperties.restingRotation.x, placeObject.floorYRot + placeObject.itemProperties.floorYOffset + 90f, placeObject.itemProperties.restingRotation.z);
+            placeObject.gameObject.transform.localPosition = positionOffset;
         }
 
         private void InitializeNetworkTransform()
@@ -75,9 +102,9 @@ namespace Physics_Items
         private void AddPhysicsComponent(GrabbableObject grabbableObject)
         {
             if (grabbableObject.gameObject.GetComponent<NetworkObject>() == null) return;
-            if (grabbableObject.gameObject.GetComponent<Rigidbody>() != null && !skipObject.Contains(grabbableObject))
+            if ((grabbableObject.gameObject.GetComponent<Rigidbody>() != null || manualSkipList.Contains(grabbableObject.GetType())) && !skipObject.Contains(grabbableObject))
             {
-                Logger.LogWarning($"Item: {grabbableObject.gameObject} already has a rigidbody, skipping.");
+                Logger.LogWarning($"Skipping Item: {grabbableObject.gameObject}");
                 grabbableObject.gameObject.AddComponent<DestroyHelper>();
                 skipObject.Add(grabbableObject);
                 return;
@@ -122,17 +149,18 @@ namespace Physics_Items
             // TODO: Don't let players interact with certain objects if the ship is landing
             orig(self, used, buttonDown);
         }
-        /*private void StartOfRound_LoadShipGrabbableItems(On.StartOfRound.orig_LoadShipGrabbableItems orig, StartOfRound self)
+        private void StartOfRound_LoadShipGrabbableItems(On.StartOfRound.orig_LoadShipGrabbableItems orig, StartOfRound self)
         {
             orig(self);
             List<GrabbableObject> grabbableList = FindObjectsByType<GrabbableObject>(FindObjectsInactive.Exclude, FindObjectsSortMode.None).ToList();
             foreach (GrabbableObject grab in grabbableList)
             {
-                grab.transform.parent = self.elevatorTransform;
+                /*grab.transform.parent = self.elevatorTransform;
                 grab.isInShipRoom = true;
-                grab.isInElevator = true;
+                grab.isInElevator = true;*/
+                
             }
-        }*/
+        }
 
         private void GrabbableObject_OnPlaceObject(On.GrabbableObject.orig_OnPlaceObject orig, GrabbableObject self)
         {

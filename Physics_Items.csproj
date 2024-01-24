@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>Physics_Items</AssemblyName>
     <Description>My first plugin</Description>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
@@ -36,6 +36,9 @@
 		<Reference Include="Spantle.ThrowEverything" Publicize="true">
 			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/Spantle-ThrowEverything/Spantle.ThrowEverything.dll</HintPath>
 		</Reference>
+		<Reference Include="com.potatoepet.AdvancedCompany" Publicize="true">
+			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/PotatoePet-AdvancedCompany/advancedcompany/AdvancedCompany.dll</HintPath>
+		</Reference>
 	</ItemGroup>
 	
 	<!-- make all references non-private, so they won't be copied to the output folder -->
@@ -47,5 +50,20 @@
   
   <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+  
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
   </ItemGroup>
 </Project>

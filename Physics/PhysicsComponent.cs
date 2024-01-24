@@ -7,6 +7,7 @@ using System.Text;
 using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
+using UnityEngine.Experimental.Audio;
 
 namespace Physics_Items.Physics
 {
@@ -23,7 +24,8 @@ namespace Physics_Items.Physics
         public float terminalVelocity;
         public float gravity = 9.8f;
         public float throwForce;
-        
+
+        public AudioSource audioSource;
 
         public LungProp lungPropRef; // I have this so I don't have to get component or do an is cast.
         void Awake()
@@ -61,6 +63,7 @@ namespace Physics_Items.Physics
             {
                 lungPropRef = lungProp;
             }
+            audioSource = gameObject.GetComponent<AudioSource>();
             InitializeVariables();
         }
 
@@ -68,6 +71,8 @@ namespace Physics_Items.Physics
         {
             rigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
             rigidbody.drag = 0.1f;
+            rigidbody.excludeLayers = LayerMask.GetMask("Player"); // could be slow idk
+            Plugin.Logger.LogWarning(rigidbody.excludeLayers.value);
             if (lungPropRef != null)
             {
                 rigidbody.isKinematic = lungPropRef.isLungDocked || lungPropRef.isLungDockedInElevator;
@@ -76,7 +81,6 @@ namespace Physics_Items.Physics
             {
                 rigidbody.isKinematic = false; // might mess up the popup notification.
             }
-
             throwForce = rigidbody.mass * 10f;
 
             networkTransform.SyncScaleX = false;
@@ -128,6 +132,16 @@ namespace Physics_Items.Physics
             rigidbody.mass = Mathf.Max(calculatedMass, 1);
             terminalVelocity = MathF.Sqrt(2 * rigidbody.mass * gravity);
             grabbableObjectRef.itemProperties.itemSpawnsOnGround = false;
+        }
+
+        void OnEnable()
+        {
+            
+        }
+
+        void OnDisable()
+        {
+            
         }
 
         bool IsHostOrServer
@@ -186,6 +200,8 @@ namespace Physics_Items.Physics
 
         }
 
+        // TODO: Stop doing dumb shit.
+        // TODO: Learn how to use rigidbodies efficiently.
         protected virtual void Update()
         {
             if(oldValue != Plugin.Instance.ServerHasMod)
@@ -194,30 +210,42 @@ namespace Physics_Items.Physics
                 Plugin.Logger.LogWarning($"Setting {gameObject} Network Transform enabled to {Plugin.Instance.ServerHasMod}");
                 networkTransform.enabled = Plugin.Instance.ServerHasMod;
             }
-            if ((grabbableObjectRef.isInShipRoom || grabbableObjectRef.isInElevator))
+            if (grabbableObjectRef.isInShipRoom)
             {
-                rigidbody.isKinematic = !StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase || isPlaced; // Ill fix this eventually
-            }
-            if(networkTransform.enabled != !grabbableObjectRef.isHeld && Plugin.Instance.ServerHasMod)
-            {
-                networkTransform.enabled = !grabbableObjectRef.isHeld;
+                rigidbody.isKinematic = !StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase || isPlaced; // TODO: Make items work when ship is moving.
             }
             if (lungPropRef != null)
             {
-                bool isDocked = lungPropRef.isLungDocked || lungPropRef.isLungDockedInElevator;
+                bool isDocked = lungPropRef.isLungDocked || lungPropRef.isLungDockedInElevator || (!StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase || isPlaced);
                 if (rigidbody.isKinematic == isDocked) return;
-                rigidbody.isKinematic = lungPropRef.isLungDocked || lungPropRef.isLungDockedInElevator;
+                rigidbody.isKinematic = isDocked;
             }
         }
 
         public void PlayDropSFX()
         {
-            grabbableObjectRef.PlayDropSFX();
+            if (grabbableObjectRef.itemProperties.dropSFX != null)
+            {
+                AudioClip clip = grabbableObjectRef.itemProperties.dropSFX;
+                if (Plugin.Instance.useSourceSounds.Value) clip = Utils.ListUtil.GetRandomElement(Utils.AssetLoader.allAudioList);
+                if (audioSource != null) audioSource.PlayOneShot(clip);
+                if (grabbableObjectRef.IsOwner)
+                {
+                    RoundManager.Instance.PlayAudibleNoise(base.transform.position, 8f, 0.5f, 0, grabbableObjectRef.isInElevator && StartOfRound.Instance.hangarDoorsClosed, 941);
+                }
+            }
+            grabbableObjectRef.hasHitGround = true;
         }
 
+        static bool firstHit = false;
         // This is so scuffed
         protected virtual void OnCollisionEnter(Collision collision)
         {
+            if (!firstHit) // So no jumpscare when items first load in xD
+            {
+                firstHit = true;
+                return;
+            }
             if (IsHostOrServer)
             {
                 int id = gameObject.GetInstanceID();
@@ -243,10 +271,11 @@ namespace Physics_Items.Physics
         {
             if (grabbableObjectRef == null)
             {
-                Plugin.Logger.LogError($"{gameObject} Does not have a valid grabbable object component to reference from.");
+                Plugin.Logger.LogError($"{gameObject} Does not have a valid grabbable object component to reference from. Destroying script.");
+                Destroy(this);
                 return;
             }
-            if (grabbableObjectRef.parentObject != null && (grabbableObjectRef.parentObject))
+            if (grabbableObjectRef.parentObject != null && grabbableObjectRef.isHeld)
             {
                 transform.rotation = grabbableObjectRef.parentObject.rotation;
                 Vector3 rotationOffset = grabbableObjectRef.itemProperties.rotationOffset;
