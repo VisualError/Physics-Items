@@ -1,5 +1,6 @@
 ﻿using GameNetcodeStuff;
 using MonoMod.Utils.Cil;
+using Physics_Items.ModCompatFixes;
 using Physics_Items.NamedMessages;
 using System;
 using System.Collections.Generic;
@@ -10,7 +11,7 @@ using Unity.Netcode.Components;
 using UnityEngine;
 using UnityEngine.Experimental.Audio;
 
-namespace Physics_Items.Physics
+namespace Physics_Items.ItemPhysics
 {
     [RequireComponent(typeof(GrabbableObject))]
     public class PhysicsComponent : MonoBehaviour, IHittable
@@ -28,6 +29,7 @@ namespace Physics_Items.Physics
         public float gravity = 9.8f;
         public float throwForce;
         public float oldVolume;
+        public bool alreadyPickedUp = false;
         public Vector3 up;
 
         public AudioSource audioSource;
@@ -74,15 +76,20 @@ namespace Physics_Items.Physics
             oldVolume = audioSource.volume;
             throwForce = rigidbody.mass * 10f;
             up = grabbableObjectRef.itemProperties.verticalOffset * Vector3.up;
+
+            if (LethalThingsCompatibility.enabled)
+            {
+                LethalThingsCompatibility.ApplyFixes(this);
+            }
         }
 
-        void SetPosition()
+        public void SetPosition()
         {
             Transform parent = GetParent();
             if (parent != transform)
             {
-                Vector3 relativePosition = parent.InverseTransformPoint(transform.position + up);
-                transform.localPosition = relativePosition;
+                Vector3 relativePosition = parent.InverseTransformPoint(transform.position);
+                transform.localPosition = relativePosition; //Vector3.Lerp(transform.localPosition, relativePosition + up, 0.2f);
             }
         }
 
@@ -90,8 +97,8 @@ namespace Physics_Items.Physics
         {
 
             SetPosition();
-
-            grabbableObjectRef.itemProperties.itemSpawnsOnGround = false;
+            alreadyPickedUp = !Plugin.Instance.physicsOnPickup.Value;
+            grabbableObjectRef.itemProperties.itemSpawnsOnGround = Plugin.Instance.physicsOnPickup.Value;
             //rigidbody.detectCollisions = true;
             rigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
             rigidbody.drag = 0.1f;
@@ -141,13 +148,11 @@ namespace Physics_Items.Physics
 
         void OnEnable()
         {
-            Plugin.Logger.LogWarning("enabled");
             InitializeVariables();
         }
 
         void OnDisable()
         {
-            Plugin.Logger.LogWarning("disabled");
             UninitializeVariables();
         }
 
@@ -246,7 +251,7 @@ namespace Physics_Items.Physics
             }
         }
 
-        bool oldValue;
+        bool oldValue = false;
         private Transform parent;
         private Vector3? relativePosition;
         private Vector3 oldPos;
@@ -271,7 +276,7 @@ namespace Physics_Items.Physics
             if (grabbableObjectRef.isInShipRoom || grabbableObjectRef.isInElevator)
             {
                 rigidbody.isKinematic = !StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase || isPlaced; // TODO: Make items work when ship is moving.
-                if (rigidbody.isKinematic)
+                if (rigidbody.isKinematic && !isPlaced)
                 {
                     SetPosition();
                     enabled = false;
@@ -343,7 +348,7 @@ namespace Physics_Items.Physics
                     }
                     else
                     {
-                        vol = Mathf.Min(velocityMag, oldVolume); //oldVolume;
+                        vol = Mathf.Clamp(velocityMag, 0.2f, oldVolume); //Mathf.Min(velocityMag, oldVolume); //oldVolume;
                     }
                     audioSource.volume = vol; //Mathf.Clamp(velocityMag, 0f, audioSource.maxDistance);
                     audioSource.PlayOneShot(clip, audioSource.volume);
@@ -363,6 +368,11 @@ namespace Physics_Items.Physics
         // This is so scuffed
         protected virtual void OnCollisionEnter(Collision collision)
         {
+            if (collision.gameObject.layer == 26 && Plugin.Instance.disablePlayerCollision.Value) // Not sure if layer 26 is player only. ehhghh
+            {
+                Physics.IgnoreCollision(collider, collision.gameObject.GetComponent<Collider>(), true); // test
+                return;
+            }
             if (!firstHit) // So no jumpscare when items first load in xD
             {
                 firstHit = true;

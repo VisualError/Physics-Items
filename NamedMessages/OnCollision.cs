@@ -1,5 +1,5 @@
 ﻿using HarmonyLib;
-using Physics_Items.Physics;
+using Physics_Items.ItemPhysics;
 using Physics_Items.Utils;
 using Unity.Netcode;
 using UnityEngine;

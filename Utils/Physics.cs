@@ -1,4 +1,4 @@
-﻿using Physics_Items.Physics;
+﻿using Physics_Items.ItemPhysics;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -15,7 +15,7 @@ namespace Physics_Items.Utils
             return gameObj.GetComponent<PhysicsComponent>();
         }
 
-        internal static PhysicsComponent GetPhysicsComponent(GameObject gameObj, out PhysicsComponent physicsComponent)
+        internal static bool GetPhysicsComponent(GameObject gameObj, out PhysicsComponent physicsComponent)
         {
             if (physicsComponents.ContainsKey(gameObj))
             {
@@ -26,7 +26,7 @@ namespace Physics_Items.Utils
                 physicsComponent = gameObj.GetComponent<PhysicsComponent>();
                 physicsComponents.Add(gameObj, physicsComponent);
             }
-            return physicsComponent;
+            return physicsComponent != null;
         }
 
         internal static bool RemovePhysicsComponent(GameObject gameObj)

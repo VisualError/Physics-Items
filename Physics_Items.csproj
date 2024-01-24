@@ -39,6 +39,12 @@
 		<Reference Include="com.potatoepet.AdvancedCompany" Publicize="true">
 			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/PotatoePet-AdvancedCompany/advancedcompany/AdvancedCompany.dll</HintPath>
 		</Reference>
+		<Reference Include="Jordo.NeedyCats" Publicize="true">
+			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/Jordo-NeedyCats/NeedyCats.dll</HintPath>
+		</Reference>
+		<Reference Include="evaisa.lethalthings" Publicize="true">
+			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/Evaisa-LethalThings/LethalThings/LethalThings.dll</HintPath>
+		</Reference>
 	</ItemGroup>
 	
 	<!-- make all references non-private, so they won't be copied to the output folder -->

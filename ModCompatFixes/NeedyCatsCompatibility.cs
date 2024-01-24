@@ -1,12 +1,15 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Physics_Items.ModCompatFixes
 {
-    internal static class AdvancedCompanyCompatibility
+    internal class NeedyCatsCompatibility
     {
         private static bool? _enabled;
-        private static string modGUID = "com.potatoepet.AdvancedCompany";
 
+        private static string modGUID = NeedyCats.NeedyCatsBase.modGUID;
         public static bool enabled
         {
             get
@@ -22,7 +25,7 @@ namespace Physics_Items.ModCompatFixes
         public static void ApplyFixes()
         {
             Plugin.Logger.LogInfo($"Applying compatibility fixes to: {modGUID}");
-            Plugin.Instance.moddedSkipList.Add(typeof(AdvancedCompany.Objects.LightningRod));
+            Plugin.Instance.moddedSkipList.Add(typeof(NeedyCats.NeedyCatProp));
         }
     }
 }

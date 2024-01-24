@@ -11,14 +11,14 @@ namespace Physics_Items.ModCompatFixes
     internal static class ThrowEverythingCompatibility
     {
         private static bool? _enabled;
-
+        private static string modGUID = ThrowEverything.PluginInfo.PLUGIN_GUID;
         public static bool enabled
         {
             get
             {
                 if (_enabled == null)
                 {
-                    _enabled = BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey("Spantle.ThrowEverything");
+                    _enabled = BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(modGUID);
                 }
                 return (bool)_enabled;
             }
@@ -27,6 +27,7 @@ namespace Physics_Items.ModCompatFixes
         [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
         public static void ApplyFixes()
         {
+            Plugin.Logger.LogInfo($"Applying compatibility fixes to: {modGUID}");
             Plugin.Instance.Harmony.PatchAll(typeof(ThrowEverythingCompatibility));
         }
 

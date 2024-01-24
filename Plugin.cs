@@ -5,7 +5,7 @@ using BepInEx.Logging;
 using HarmonyLib;
 using Physics_Items.ModCompatFixes;
 using Physics_Items.NamedMessages;
-using Physics_Items.Physics;
+using Physics_Items.ItemPhysics;
 using Physics_Items.Utils;
 using System;
 using System.Collections.Generic;
@@ -22,6 +22,7 @@ namespace Physics_Items
     [BepInProcess("lethal company.exe")]
     [BepInDependency("Spantle.ThrowEverything", BepInDependency.DependencyFlags.SoftDependency)] // Idk how to add hookgen patcher as a dep.
     [BepInDependency("com.potatoepet.AdvancedCompany", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("Jordo.NeedyCats", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
         internal static new ManualLogSource Logger;
@@ -32,6 +33,8 @@ namespace Physics_Items
         internal HashSet<Type> moddedSkipList = new HashSet<Type>();
         internal ConfigEntry<bool> useSourceSounds;
         internal ConfigEntry<bool> overrideAllItemPhysics;
+        internal ConfigEntry<bool> physicsOnPickup;
+        internal ConfigEntry<bool> disablePlayerCollision;
         internal ConfigEntry<bool> overrideAllModdedItemPhysics;
         internal readonly Harmony Harmony = new(PluginInfo.PLUGIN_GUID);
 
@@ -46,9 +49,11 @@ namespace Physics_Items
             AssetLoader.LoadAssetBundles();
 
             #region "Configs"
-            useSourceSounds = Config.Bind("Fun", "Use Source Engine Collision Sounds", true, "Use source rigidbody sounds.");
+            useSourceSounds = Config.Bind("Fun", "Use Source Engine Collision Sounds", false, "Use source rigidbody sounds.");
             overrideAllItemPhysics = Config.Bind("Fun", "Override all Item Physics", false, "ALL Items will have physics, regardless of issues.");
             overrideAllModdedItemPhysics = Config.Bind("Fun", "Override all MODDED Item Physics", false, "ALL Modded Items will have physics, regardless of issues.");
+            physicsOnPickup = Config.Bind("Physics Behaviour", "Physics On Pickup", false, "Only enable item physisc when it has been picked up at least once.");
+            disablePlayerCollision = Config.Bind("Physics Behaviour", "Disable Player Collision", false, "Set if Physical Items can collide with players.");
             #endregion
 
             #region "Harmony Patches"
@@ -62,20 +67,37 @@ namespace Physics_Items
             {
                 AdvancedCompanyCompatibility.ApplyFixes();
             }
+            if (NeedyCatsCompatibility.enabled)
+            {
+                NeedyCatsCompatibility.ApplyFixes();
+            }
             manualSkipList.Add(typeof(ExtensionLadderItem));
+            manualSkipList.Add(typeof(RadarBoosterItem));
             #endregion
 
             #region "MonoMod Hooks"
+
+            ItemPhysics.Environment.Landmine.Init();
+
             On.GrabbableObject.Start += GrabbableObject_Start;
             On.GrabbableObject.Update += GrabbableObject_Update;
             On.GrabbableObject.EquipItem += GrabbableObject_EquipItem;
             On.GrabbableObject.EnablePhysics += GrabbableObject_EnablePhysics;
             On.GrabbableObject.OnPlaceObject += GrabbableObject_OnPlaceObject;
             On.GrabbableObject.ItemActivate += GrabbableObject_ItemActivate;
+            On.GrabbableObject.GrabItem += GrabbableObject_GrabItem;
             On.GameNetcodeStuff.PlayerControllerB.PlaceGrabbableObject += PlayerControllerB_PlaceGrabbableObject;
             On.GameNetcodeStuff.PlayerControllerB.SetObjectAsNoLongerHeld += PlayerControllerB_SetObjectAsNoLongerHeld;
             On.MenuManager.Awake += MenuManager_Awake;
             #endregion
+        }
+
+        private void GrabbableObject_GrabItem(On.GrabbableObject.orig_GrabItem orig, GrabbableObject self)
+        {
+            orig(self);
+            Utils.Physics.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp);
+            if (comp == null) return;
+            comp.alreadyPickedUp = true;
         }
 
         private void StartOfRound_SyncAlreadyHeldObjectsClientRpc(On.StartOfRound.orig_SyncAlreadyHeldObjectsClientRpc orig, StartOfRound self, NetworkObjectReference[] gObjects, int[] playersHeldBy, int[] itemSlotNumbers, int[] isObjectPocketed, int syncWithClient)
@@ -123,29 +145,29 @@ namespace Physics_Items
         }
 
         // TODO: Optimize code
-        private void AddPhysicsComponent(GrabbableObject grabbableObject)
+        private PhysicsComponent AddPhysicsComponent(GrabbableObject grabbableObject)
         {
-            if (grabbableObject.gameObject.GetComponent<NetworkObject>() == null) return;
-            if (grabbableObject.gameObject.GetComponent<Rigidbody>() != null)
+            if (grabbableObject.gameObject.GetComponent<NetworkObject>() == null) return null;
+            if (grabbableObject.gameObject.GetComponent<Rigidbody>() != null || grabbableObject.gameObject.GetComponentInChildren<Rigidbody>() != null)
             {
-                Logger.LogWarning($"Skipping Item: {grabbableObject.gameObject}");
+                Logger.LogWarning($"Skipping Item with Rigidbody: {grabbableObject.gameObject}");
                 grabbableObject.gameObject.AddComponent<DestroyHelper>();
                 skipObject.Add(grabbableObject);
-                return;
+                return null;
             }else if (manualSkipList.Contains(grabbableObject.GetType()))
             {
-                if (overrideAllItemPhysics.Value) return;
+                if (overrideAllItemPhysics.Value) return null;
                 Logger.LogWarning($"Skipping Vanilla Item: {grabbableObject.gameObject}");
                 grabbableObject.gameObject.AddComponent<DestroyHelper>();
                 skipObject.Add(grabbableObject);
-                return;
+                return null;
             }else if (moddedSkipList.Contains(grabbableObject.GetType()))
             {
-                if (overrideAllModdedItemPhysics.Value) return;
+                if (overrideAllModdedItemPhysics.Value) return null;
                 Logger.LogWarning($"Skipping Modded Item: {grabbableObject.gameObject}");
                 grabbableObject.gameObject.AddComponent<DestroyHelper>();
                 skipObject.Add(grabbableObject);
-                return;
+                return null;
             }
             PhysicsComponent component;
             if (!grabbableObject.gameObject.TryGetComponent(out component))
@@ -155,13 +177,14 @@ namespace Physics_Items
             if (component == null)
             {
                 Logger.LogError($"Physics Component of {grabbableObject.gameObject} is null! This shouldn't happen!");
-                return;
+                return null;
             }
             Logger.LogInfo($"Successfully added Physics Component to {grabbableObject.gameObject}.");
             if (grabbableObject.TryGetComponent(out Collider collider))
             {
                 collider.isTrigger = false; // I'm not sure if this will break anything. I'm doing this because the Teeth item spawns out of existence if isTrigger is true.
             }
+            return component;
         }
 
         #region "MonoMod Patches"
@@ -233,7 +256,16 @@ namespace Physics_Items
         private void GrabbableObject_Start(On.GrabbableObject.orig_Start orig, GrabbableObject self)
         {
             if (Utils.Physics.GetPhysicsComponent(self.gameObject) != null) return;
-            AddPhysicsComponent(self);
+            if (physicsOnPickup.Value)
+            {
+                skipObject.Add(self);
+            }
+            PhysicsComponent comp = AddPhysicsComponent(self);
+            if (comp != null)
+            {
+                comp.enabled = false;
+                comp.SetPosition();
+            }
             orig(self);
         }
 

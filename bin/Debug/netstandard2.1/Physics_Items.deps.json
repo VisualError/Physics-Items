@@ -20,6 +20,8 @@
           "Unity.Netcode.Runtime": "0.0.0.0",
           "AdvancedCompany": "0.0.0.0",
           "Assembly-CSharp": "0.0.0.0",
+          "LethalThings": "1.0.0.0",
+          "NeedyCats": "1.0.0.0",
           "Spantle.ThrowEverything": "0.3.0.0"
         },
         "runtime": {
@@ -433,6 +435,22 @@
           "Assembly-CSharp.dll": {
             "assemblyVersion": "0.0.0.0",
             "fileVersion": "0.0.0.0"
+          }
+        }
+      },
+      "LethalThings/1.0.0.0": {
+        "runtime": {
+          "LethalThings.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "NeedyCats/1.0.0.0": {
+        "runtime": {
+          "NeedyCats.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
           }
         }
       },
@@ -1015,6 +1033,16 @@
       "sha512": ""
     },
     "Assembly-CSharp/0.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "LethalThings/1.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "NeedyCats/1.0.0.0": {
       "type": "reference",
       "serviceable": false,
       "sha512": ""

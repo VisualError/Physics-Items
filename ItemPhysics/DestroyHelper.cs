@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 
-namespace Physics_Items.Physics
+namespace Physics_Items.ItemPhysics
 {
     internal class DestroyHelper : MonoBehaviour
     {
