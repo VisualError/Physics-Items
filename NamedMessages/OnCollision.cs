@@ -1,5 +1,6 @@
 ﻿using HarmonyLib;
 using Physics_Items.Physics;
+using Physics_Items.Utils;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -23,13 +24,12 @@ namespace Physics_Items.NamedMessages
 
         private static void OnReceive(ulong senderClientId, FastBufferReader messagePayload)
         {
-            int value;
+            NetworkObjectReference value;
             messagePayload.ReadValueSafe(out value);
-            Object got = GameObject.FindObjectFromInstanceID(value);
-            if(got is GameObject obj && obj != null)
+            if(value.TryGet(out NetworkObject netobj))
             {
-                PhysicsComponent physComp = Utils.Physics.GetPhysicsComponent(obj);
-                if(physComp != null)
+                PhysicsComponent physComp = Utils.Physics.GetPhysicsComponent(netobj.transform.gameObject);
+                if (physComp != null)
                 {
                     physComp.PlayDropSFX();
                 }

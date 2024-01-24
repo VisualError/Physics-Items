@@ -9,7 +9,9 @@ using Physics_Items.Physics;
 using Physics_Items.Utils;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
+using System.Xml.Linq;
 using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
@@ -27,7 +29,10 @@ namespace Physics_Items
         internal bool Initialized = false;
         internal bool ServerHasMod = false;
         internal HashSet<Type> manualSkipList = new HashSet<Type>();
+        internal HashSet<Type> moddedSkipList = new HashSet<Type>();
         internal ConfigEntry<bool> useSourceSounds;
+        internal ConfigEntry<bool> overrideAllItemPhysics;
+        internal ConfigEntry<bool> overrideAllModdedItemPhysics;
         internal readonly Harmony Harmony = new(PluginInfo.PLUGIN_GUID);
 
         internal HashSet<GrabbableObject> skipObject = new HashSet<GrabbableObject>();
@@ -42,6 +47,8 @@ namespace Physics_Items
 
             #region "Configs"
             useSourceSounds = Config.Bind("Fun", "Use Source Engine Collision Sounds", true, "Use source rigidbody sounds.");
+            overrideAllItemPhysics = Config.Bind("Fun", "Override all Item Physics", false, "ALL Items will have physics, regardless of issues.");
+            overrideAllModdedItemPhysics = Config.Bind("Fun", "Override all MODDED Item Physics", false, "ALL Modded Items will have physics, regardless of issues.");
             #endregion
 
             #region "Harmony Patches"
@@ -68,13 +75,28 @@ namespace Physics_Items
             On.GameNetcodeStuff.PlayerControllerB.PlaceGrabbableObject += PlayerControllerB_PlaceGrabbableObject;
             On.GameNetcodeStuff.PlayerControllerB.SetObjectAsNoLongerHeld += PlayerControllerB_SetObjectAsNoLongerHeld;
             On.MenuManager.Awake += MenuManager_Awake;
-            On.StartOfRound.LoadShipGrabbableItems += StartOfRound_LoadShipGrabbableItems;
             #endregion
+        }
+
+        private void StartOfRound_SyncAlreadyHeldObjectsClientRpc(On.StartOfRound.orig_SyncAlreadyHeldObjectsClientRpc orig, StartOfRound self, NetworkObjectReference[] gObjects, int[] playersHeldBy, int[] itemSlotNumbers, int[] isObjectPocketed, int syncWithClient)
+        {
+            Logger.LogWarning("CALL!");
+            orig(self, gObjects, playersHeldBy, itemSlotNumbers, isObjectPocketed, syncWithClient);
+            List<GrabbableObject> grabbableList = FindObjectsByType<GrabbableObject>(FindObjectsInactive.Exclude, FindObjectsSortMode.None).ToList();
+            foreach (GrabbableObject grab in grabbableList)
+            {
+                grab.transform.parent = self.elevatorTransform;
+                //RoundManager.Instance.CollectNewScrapForThisRound(grab);
+                GameNetworkManager.Instance.localPlayerController.SetItemInElevator(false, false, grab);
+                HUDManager.Instance.AddNewScrapFoundToDisplay(grab);
+                //grab.OnBroughtToShip();
+            }
         }
 
         private void PlayerControllerB_PlaceGrabbableObject(On.GameNetcodeStuff.PlayerControllerB.orig_PlaceGrabbableObject orig, GameNetcodeStuff.PlayerControllerB self, Transform parentObject, Vector3 positionOffset, bool matchRotationOfParent, GrabbableObject placeObject)
         {
             orig(self, parentObject, positionOffset, matchRotationOfParent, placeObject);
+            if (skipObject.Contains(placeObject)) return;
             Utils.Physics.GetPhysicsComponent(placeObject.gameObject, out PhysicsComponent physics);
             if (physics == null) return;
             physics.isPlaced = true;
@@ -89,7 +111,8 @@ namespace Physics_Items
             foreach (GrabbableObject grabbableObject in Resources.FindObjectsOfTypeAll<GrabbableObject>())
             {
                 //AddPhysicsComponent(grabbableObject);
-                if(grabbableObject.gameObject.GetComponent<NetworkTransform>() == null) // This is so jank lmfao
+                if (skipObject.Contains(grabbableObject) || manualSkipList.Contains(grabbableObject.GetType())) return;
+                if (grabbableObject.gameObject.GetComponent<NetworkTransform>() == null) // This is so jank lmfao
                 {
                     NetworkTransform netTransform = grabbableObject.gameObject.AddComponent<NetworkTransform>();
                     netTransform.enabled = false;
@@ -99,12 +122,27 @@ namespace Physics_Items
             Initialized = true;
         }
 
+        // TODO: Optimize code
         private void AddPhysicsComponent(GrabbableObject grabbableObject)
         {
             if (grabbableObject.gameObject.GetComponent<NetworkObject>() == null) return;
-            if ((grabbableObject.gameObject.GetComponent<Rigidbody>() != null || manualSkipList.Contains(grabbableObject.GetType())) && !skipObject.Contains(grabbableObject))
+            if (grabbableObject.gameObject.GetComponent<Rigidbody>() != null)
             {
                 Logger.LogWarning($"Skipping Item: {grabbableObject.gameObject}");
+                grabbableObject.gameObject.AddComponent<DestroyHelper>();
+                skipObject.Add(grabbableObject);
+                return;
+            }else if (manualSkipList.Contains(grabbableObject.GetType()))
+            {
+                if (overrideAllItemPhysics.Value) return;
+                Logger.LogWarning($"Skipping Vanilla Item: {grabbableObject.gameObject}");
+                grabbableObject.gameObject.AddComponent<DestroyHelper>();
+                skipObject.Add(grabbableObject);
+                return;
+            }else if (moddedSkipList.Contains(grabbableObject.GetType()))
+            {
+                if (overrideAllModdedItemPhysics.Value) return;
+                Logger.LogWarning($"Skipping Modded Item: {grabbableObject.gameObject}");
                 grabbableObject.gameObject.AddComponent<DestroyHelper>();
                 skipObject.Add(grabbableObject);
                 return;
@@ -122,7 +160,7 @@ namespace Physics_Items
             Logger.LogInfo($"Successfully added Physics Component to {grabbableObject.gameObject}.");
             if (grabbableObject.TryGetComponent(out Collider collider))
             {
-                collider.isTrigger = false; // I'm not sure if this will break anything.
+                collider.isTrigger = false; // I'm not sure if this will break anything. I'm doing this because the Teeth item spawns out of existence if isTrigger is true.
             }
         }
 
@@ -130,15 +168,16 @@ namespace Physics_Items
         private void PlayerControllerB_SetObjectAsNoLongerHeld(On.GameNetcodeStuff.PlayerControllerB.orig_SetObjectAsNoLongerHeld orig, GameNetcodeStuff.PlayerControllerB self, bool droppedInElevator, bool droppedInShipRoom, Vector3 targetFloorPosition, GrabbableObject dropObject, int floorYRot)
         {
             orig(self, droppedInElevator, droppedInElevator, targetFloorPosition, dropObject, floorYRot);
+            if (skipObject.Contains(dropObject)) return;
             Utils.Physics.GetPhysicsComponent(dropObject.gameObject, out PhysicsComponent comp);
             if (comp == null) return;
             float Distance = (dropObject.startFallingPosition - dropObject.targetFloorPosition).magnitude;
             var direction = (dropObject.targetFloorPosition - dropObject.startFallingPosition).normalized;
             Logger.LogWarning($"Normalized: {direction}");
             bool Thrown = direction + Vector3.up != Vector3.zero;
-            var throwForce = Thrown ? Mathf.Min(comp.throwForce, 36f) : 1f;
-            var mult = Mathf.Min(Distance * throwForce, comp.rigidbody.mass*10);
-            var force = direction * mult;
+            var throwForce = Thrown ? Mathf.Min(comp.throwForce, 36f) : 0f;
+            var mult = throwForce == 0f ? 0f : Mathf.Min(Distance * throwForce, comp.rigidbody.mass*10);
+            var force = mult == 0f ? Vector3.zero : direction * mult;
             //force = new Vector3(force.x, force.y, force.z);
             Logger.LogWarning($"Throwing with force: {force}, {Thrown}, {throwForce}, {comp.throwForce}, {comp.rigidbody.mass}");
             comp.rigidbody.AddForce(force, ForceMode.Impulse);
@@ -148,18 +187,6 @@ namespace Physics_Items
         {
             // TODO: Don't let players interact with certain objects if the ship is landing
             orig(self, used, buttonDown);
-        }
-        private void StartOfRound_LoadShipGrabbableItems(On.StartOfRound.orig_LoadShipGrabbableItems orig, StartOfRound self)
-        {
-            orig(self);
-            List<GrabbableObject> grabbableList = FindObjectsByType<GrabbableObject>(FindObjectsInactive.Exclude, FindObjectsSortMode.None).ToList();
-            foreach (GrabbableObject grab in grabbableList)
-            {
-                /*grab.transform.parent = self.elevatorTransform;
-                grab.isInShipRoom = true;
-                grab.isInElevator = true;*/
-                
-            }
         }
 
         private void GrabbableObject_OnPlaceObject(On.GrabbableObject.orig_OnPlaceObject orig, GrabbableObject self)
@@ -205,6 +232,7 @@ namespace Physics_Items
 
         private void GrabbableObject_Start(On.GrabbableObject.orig_Start orig, GrabbableObject self)
         {
+            if (Utils.Physics.GetPhysicsComponent(self.gameObject) != null) return;
             AddPhysicsComponent(self);
             orig(self);
         }

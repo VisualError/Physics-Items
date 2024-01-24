@@ -1,4 +1,5 @@
-﻿using MonoMod.Utils.Cil;
+﻿using GameNetcodeStuff;
+using MonoMod.Utils.Cil;
 using Physics_Items.NamedMessages;
 using System;
 using System.Collections.Generic;
@@ -12,18 +13,22 @@ using UnityEngine.Experimental.Audio;
 namespace Physics_Items.Physics
 {
     [RequireComponent(typeof(GrabbableObject))]
-    public class PhysicsComponent : MonoBehaviour
+    public class PhysicsComponent : MonoBehaviour, IHittable
     {
         public GrabbableObject grabbableObjectRef;
+        public Collider collider;
         public Rigidbody rigidbody;
         public NetworkTransform networkTransform;
         public NetworkObject networkObject;
         public NetworkRigidbody networkRigidbody;
+        public PhysicsHelper physicsHelperRef;
         public bool isPlaced = false;
         public Rigidbody scanNodeRigid;
         public float terminalVelocity;
         public float gravity = 9.8f;
         public float throwForce;
+        public float oldVolume;
+        public Vector3 up;
 
         public AudioSource audioSource;
 
@@ -64,15 +69,32 @@ namespace Physics_Items.Physics
                 lungPropRef = lungProp;
             }
             audioSource = gameObject.GetComponent<AudioSource>();
-            InitializeVariables();
+            physicsHelperRef = gameObject.AddComponent<PhysicsHelper>();
+            collider = gameObject.GetComponent<Collider>();
+            oldVolume = audioSource.volume;
+            throwForce = rigidbody.mass * 10f;
+            up = grabbableObjectRef.itemProperties.verticalOffset * Vector3.up;
+        }
+
+        void SetPosition()
+        {
+            Transform parent = GetParent();
+            if (parent != transform)
+            {
+                Vector3 relativePosition = parent.InverseTransformPoint(transform.position + up);
+                transform.localPosition = relativePosition;
+            }
         }
 
         void InitializeVariables()
         {
+
+            SetPosition();
+
+            grabbableObjectRef.itemProperties.itemSpawnsOnGround = false;
+            //rigidbody.detectCollisions = true;
             rigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
             rigidbody.drag = 0.1f;
-            rigidbody.excludeLayers = LayerMask.GetMask("Player"); // could be slow idk
-            Plugin.Logger.LogWarning(rigidbody.excludeLayers.value);
             if (lungPropRef != null)
             {
                 rigidbody.isKinematic = lungPropRef.isLungDocked || lungPropRef.isLungDockedInElevator;
@@ -81,15 +103,52 @@ namespace Physics_Items.Physics
             {
                 rigidbody.isKinematic = false; // might mess up the popup notification.
             }
-            throwForce = rigidbody.mass * 10f;
 
             networkTransform.SyncScaleX = false;
             networkTransform.SyncScaleY = false;
             networkTransform.SyncScaleZ = false;
 
-            if (scanNodeRigid == null) return;
-            scanNodeRigid.isKinematic = true;
-            scanNodeRigid.useGravity = false;
+            networkTransform.enabled = Plugin.Instance.ServerHasMod;
+
+            grabbableObjectRef.fallTime = 1f;
+            grabbableObjectRef.reachedFloorTarget = true;
+            Plugin.Instance.skipObject.Remove(grabbableObjectRef);
+
+            if (scanNodeRigid != null)
+            {
+                scanNodeRigid.isKinematic = true;
+                scanNodeRigid.useGravity = false;
+            }
+        }
+
+        void UninitializeVariables()
+        {
+            //grabbableObjectRef.itemProperties.itemSpawnsOnGround = true;
+            grabbableObjectRef.EnablePhysics(false); // Do this first so the EnablePhysics patch doesn't get skipped.
+            Plugin.Instance.skipObject.Add(grabbableObjectRef);
+            EnableColliders(true);
+            //rigidbody.detectCollisions = false;
+
+            grabbableObjectRef.fallTime = 0f;
+            grabbableObjectRef.reachedFloorTarget = false;
+            audioSource.volume = oldVolume;
+            //transform.rotation = Quaternion.Euler(grabbableObjectRef.itemProperties.restingRotation.x, grabbableObjectRef.floorYRot + grabbableObjectRef.itemProperties.floorYOffset + 90f, grabbableObjectRef.itemProperties.restingRotation.z);
+            networkTransform.enabled = false;
+            firstHit = false;
+            hitDir = Vector3.zero;
+            oldValue = false;
+        }
+
+        void OnEnable()
+        {
+            Plugin.Logger.LogWarning("enabled");
+            InitializeVariables();
+        }
+
+        void OnDisable()
+        {
+            Plugin.Logger.LogWarning("disabled");
+            UninitializeVariables();
         }
 
         /*public override void OnNetworkSpawn()
@@ -132,16 +191,15 @@ namespace Physics_Items.Physics
             rigidbody.mass = Mathf.Max(calculatedMass, 1);
             terminalVelocity = MathF.Sqrt(2 * rigidbody.mass * gravity);
             grabbableObjectRef.itemProperties.itemSpawnsOnGround = false;
-        }
 
-        void OnEnable()
-        {
-            
-        }
-
-        void OnDisable()
-        {
-            
+            if (StartOfRound.Instance.inShipPhase)
+            {
+                grabbableObjectRef.fallTime = 1f;
+                grabbableObjectRef.hasHitGround = true;
+                grabbableObjectRef.scrapPersistedThroughRounds = true;
+                grabbableObjectRef.isInElevator = true;
+                grabbableObjectRef.isInShipRoom = true;
+            }
         }
 
         bool IsHostOrServer
@@ -189,7 +247,7 @@ namespace Physics_Items.Physics
         }
 
         bool oldValue;
-        private Transform pos;
+        private Transform parent;
         private Vector3? relativePosition;
         private Vector3 oldPos;
         private Vector3 oldRelativePosition;
@@ -210,9 +268,14 @@ namespace Physics_Items.Physics
                 Plugin.Logger.LogWarning($"Setting {gameObject} Network Transform enabled to {Plugin.Instance.ServerHasMod}");
                 networkTransform.enabled = Plugin.Instance.ServerHasMod;
             }
-            if (grabbableObjectRef.isInShipRoom)
+            if (grabbableObjectRef.isInShipRoom || grabbableObjectRef.isInElevator)
             {
                 rigidbody.isKinematic = !StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase || isPlaced; // TODO: Make items work when ship is moving.
+                if (rigidbody.isKinematic)
+                {
+                    SetPosition();
+                    enabled = false;
+                }
             }
             if (lungPropRef != null)
             {
@@ -222,22 +285,81 @@ namespace Physics_Items.Physics
             }
         }
 
+        public static float FastInverseSqrt(float number)
+        {
+            int i;
+            float x2, y;
+            const float threehalfs = 1.5F;
+
+            x2 = number * 0.5F;
+            y = number;
+            i = BitConverter.ToInt32(BitConverter.GetBytes(y), 0);
+            i = 0x5f3759df - (i >> 1);
+            y = BitConverter.ToSingle(BitConverter.GetBytes(i), 0);
+            y = y * (threehalfs - (x2 * y * y));
+
+            return 1 / y;
+        }
+
+        public Transform GetParent()
+        {
+            if (grabbableObjectRef.parentObject != null)
+            {
+                parent = grabbableObjectRef.parentObject;
+            }
+            else if (transform.parent != null)
+            {
+                parent = transform.parent;
+            }
+            else
+            {
+                parent = transform;
+            }
+            return parent;
+        }
+
         public void PlayDropSFX()
         {
+            var force = Vector3.zero;
+            if (isHit)
+            {
+                isHit = false;
+                var throwForce_ = Mathf.Min(throwForce, 36f);
+                var mult = Mathf.Min(throwForce_, rigidbody.mass * 10);
+                force = hitDir * mult;
+                rigidbody.AddForce(force, ForceMode.Impulse);
+            }
             if (grabbableObjectRef.itemProperties.dropSFX != null)
             {
                 AudioClip clip = grabbableObjectRef.itemProperties.dropSFX;
                 if (Plugin.Instance.useSourceSounds.Value) clip = Utils.ListUtil.GetRandomElement(Utils.AssetLoader.allAudioList);
-                if (audioSource != null) audioSource.PlayOneShot(clip);
+                if (audioSource != null) 
+                {
+                    float vol;
+                    if (force != Vector3.zero)
+                    {
+                        vol = Mathf.Min(force.magnitude, oldVolume);
+                        Plugin.Logger.LogWarning("wat");
+                    }
+                    else
+                    {
+                        vol = Mathf.Min(velocityMag, oldVolume); //oldVolume;
+                    }
+                    audioSource.volume = vol; //Mathf.Clamp(velocityMag, 0f, audioSource.maxDistance);
+                    audioSource.PlayOneShot(clip, audioSource.volume);
+                    //Plugin.Logger.LogWarning($"Playing with volome: {audioSource.volume}, {audioSource.minDistance} {audioSource.maxDistance}");
+                }
                 if (grabbableObjectRef.IsOwner)
                 {
-                    RoundManager.Instance.PlayAudibleNoise(base.transform.position, 8f, 0.5f, 0, grabbableObjectRef.isInElevator && StartOfRound.Instance.hangarDoorsClosed, 941);
+                    RoundManager.Instance.PlayAudibleNoise(gameObject.transform.position, 8f, 0.5f, 0, grabbableObjectRef.isInElevator && StartOfRound.Instance.hangarDoorsClosed, 941);
                 }
             }
             grabbableObjectRef.hasHitGround = true;
         }
 
         static bool firstHit = false;
+        static Vector3 velocity;
+        static float velocityMag;
         // This is so scuffed
         protected virtual void OnCollisionEnter(Collision collision)
         {
@@ -248,9 +370,9 @@ namespace Physics_Items.Physics
             }
             if (IsHostOrServer)
             {
-                int id = gameObject.GetInstanceID();
-                FastBufferWriter writer = new FastBufferWriter(FastBufferWriter.GetWriteSize(id), Unity.Collections.Allocator.Temp);
-                writer.WriteValueSafe(id);
+                NetworkObjectReference networkRef = networkObject;
+                FastBufferWriter writer = new FastBufferWriter(FastBufferWriter.GetWriteSize(networkRef), Unity.Collections.Allocator.Temp);
+                writer.WriteValueSafe(networkRef);
                 foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
                 {
                     NetworkManager.Singleton.CustomMessagingManager.SendNamedMessage(OnCollision.CollisionCheck, client.ClientId, writer, NetworkDelivery.ReliableSequenced);
@@ -260,6 +382,8 @@ namespace Physics_Items.Physics
             {
                 PlayDropSFX();
             }
+            velocity = rigidbody.velocity;
+            velocityMag = FastInverseSqrt(velocity.sqrMagnitude);
         }
 
         void OnDestroy()
@@ -291,5 +415,27 @@ namespace Physics_Items.Physics
             }
         }
 
+        public bool isHit = false;
+        public Vector3 hitDir = Vector3.zero;
+        public bool Hit(int force, Vector3 hitDirection, PlayerControllerB playerWhoHit = null, bool playHitSFX = false)
+        {
+            if (IsHostOrServer)
+            {
+                int id = gameObject.GetInstanceID();
+                FastBufferWriter writer = new FastBufferWriter(FastBufferWriter.GetWriteSize(id), Unity.Collections.Allocator.Temp);
+                writer.WriteValueSafe(id);
+                foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
+                {
+                    NetworkManager.Singleton.CustomMessagingManager.SendNamedMessage(OnCollision.CollisionCheck, client.ClientId, writer, NetworkDelivery.ReliableSequenced);
+                }
+            }
+            else if (!Plugin.Instance.ServerHasMod)
+            {
+                PlayDropSFX();
+            }
+            hitDir = hitDirection;
+            isHit = true;
+            return true;
+        }
     }
 }

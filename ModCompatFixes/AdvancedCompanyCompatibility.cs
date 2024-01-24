@@ -23,7 +23,7 @@ namespace Physics_Items.ModCompatFixes
         [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
         public static void ApplyFixes()
         {
-            Plugin.Instance.manualSkipList.Add(typeof(AdvancedCompany.Objects.LightningRod));
+            Plugin.Instance.moddedSkipList.Add(typeof(AdvancedCompany.Objects.LightningRod));
         }
     }
 }

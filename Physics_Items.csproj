@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>Physics_Items</AssemblyName>
-    <Description>My first plugin</Description>
+    <Description>Lethal Company Physics wooo!!</Description>
     <Version>0.1.1</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
