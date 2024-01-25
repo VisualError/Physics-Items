@@ -8,6 +8,7 @@ namespace Physics_Items.ItemPhysics.Environment
 {
     internal class Landmine
     {
+        static Vector3 previousExplosion = Vector3.zero;
         public static void Init()
         {
             On.Landmine.SpawnExplosion += Landmine_SpawnExplosion;
@@ -15,15 +16,22 @@ namespace Physics_Items.ItemPhysics.Environment
 
         private static void Landmine_SpawnExplosion(On.Landmine.orig_SpawnExplosion orig, UnityEngine.Vector3 explosionPosition, bool spawnExplosionEffect, float killRange, float damageRange)
         {
+
             orig(explosionPosition, spawnExplosionEffect, killRange, damageRange);
+            previousExplosion = explosionPosition;
             List<Collider> list = Physics.OverlapSphere(explosionPosition, 6f, 64, QueryTriggerInteraction.Collide).ToList();
             for (int i = 0; i < list.Count; i++)
             {
-                float magnitude = PhysicsComponent.FastInverseSqrt((explosionPosition - list[i].transform.position).sqrMagnitude);
-                Vector3 normal = (list[i].transform.position - explosionPosition).normalized;
+                Vector3 local = ((explosionPosition + Vector3.up) - list[i].transform.position);
+                float magnitude = PhysicsComponent.FastInverseSqrt(local.sqrMagnitude);
+                Vector3 normal = (local).normalized;
                 if (Utils.Physics.GetPhysicsComponent(list[i].gameObject, out PhysicsComponent physics))
                 {
-                    physics.rigidbody.AddForce(normal * magnitude * 16f, ForceMode.Impulse);
+                    var force = normal * MathF.Min(magnitude * 64 * physics.throwForce, physics.throwForce); //Mathf.Min(Distance * throwForce, comp.rigidbody.mass * 10)
+                    physics.alreadyPickedUp = true;
+                    physics.grabbableObjectRef.EnablePhysics(true);
+                    //physics.rigidbody.AddForce(normal * magnitude * 32f, ForceMode.Impulse); // 64 might be more accurate? idk.
+                    physics.rigidbody.velocity = local * 80 / magnitude;
                 }
             }
         }

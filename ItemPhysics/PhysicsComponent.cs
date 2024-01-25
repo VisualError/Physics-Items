@@ -1,8 +1,10 @@
 ﻿using GameNetcodeStuff;
+using Mono.Cecil;
 using MonoMod.Utils.Cil;
 using Physics_Items.ModCompatFixes;
 using Physics_Items.NamedMessages;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -81,8 +83,50 @@ namespace Physics_Items.ItemPhysics
             {
                 LethalThingsCompatibility.ApplyFixes(this);
             }
+            //StartCoroutine(FixPosition());
+            
         }
+        public int gridSize = 10;
+        public float cellSize = 1f;
+        public LayerMask obstacleLayer;
 
+        public IEnumerator FixPosition()
+        {
+            // Initialize the grid
+            bool[,] grid = new bool[gridSize, gridSize];
+
+            // Populate the grid
+            for (int x = 0; x < gridSize; x++)
+            {
+                for (int y = 0; y < gridSize; y++)
+                {
+                    // Calculate the center of the cell
+                    Vector3 cellCenter = new Vector3(x * cellSize, 0, y * cellSize) + new Vector3(cellSize, 0, cellSize) * 0.5f;
+
+                    // Check if there's an obstacle at the cell center
+                    if (Physics.OverlapSphere(cellCenter, cellSize * 0.5f, obstacleLayer).Length <= 0)
+                    {
+                        // No obstacle, mark the cell as free
+                        grid[x, y] = true;
+                    }
+                }
+            }
+
+            // Find a free cell
+            for (int x = 0; x < gridSize; x++)
+            {
+                for (int y = 0; y < gridSize; y++)
+                {
+                    if (grid[x, y])
+                    {
+                        // Found a free cell, move the object here
+                        transform.position = new Vector3(x * cellSize, 0, y * cellSize) + new Vector3(cellSize, 0, cellSize) * 0.5f;
+                        break;
+                    }
+                }
+            }
+            yield break;
+        }
         public void SetPosition()
         {
             Transform parent = GetParent();
@@ -90,6 +134,17 @@ namespace Physics_Items.ItemPhysics
             {
                 Vector3 relativePosition = parent.InverseTransformPoint(transform.position);
                 transform.localPosition = relativePosition; //Vector3.Lerp(transform.localPosition, relativePosition + up, 0.2f);
+            }
+        }
+        public void SetRotation()
+        {
+            if (grabbableObjectRef.floorYRot == -1)
+            {
+                transform.rotation = Quaternion.Euler(grabbableObjectRef.itemProperties.restingRotation.x, grabbableObjectRef.transform.eulerAngles.y, grabbableObjectRef.itemProperties.restingRotation.z);
+            }
+            else
+            {
+                transform.rotation = Quaternion.Euler(grabbableObjectRef.itemProperties.restingRotation.x, grabbableObjectRef.floorYRot + grabbableObjectRef.itemProperties.floorYOffset + 90f, grabbableObjectRef.itemProperties.restingRotation.z);
             }
         }
 
@@ -104,11 +159,11 @@ namespace Physics_Items.ItemPhysics
             rigidbody.drag = 0.1f;
             if (lungPropRef != null)
             {
-                rigidbody.isKinematic = lungPropRef.isLungDocked || lungPropRef.isLungDockedInElevator;
+                rigidbody.isKinematic = lungPropRef.isLungDocked || lungPropRef.isLungDockedInElevator || isPlaced;
             }
             else
             {
-                rigidbody.isKinematic = false; // might mess up the popup notification.
+                rigidbody.isKinematic = isPlaced; // might mess up the popup notification.
             }
 
             networkTransform.SyncScaleX = false;
@@ -131,6 +186,7 @@ namespace Physics_Items.ItemPhysics
         void UninitializeVariables()
         {
             //grabbableObjectRef.itemProperties.itemSpawnsOnGround = true;
+            Plugin.Logger.LogWarning("disable");
             grabbableObjectRef.EnablePhysics(false); // Do this first so the EnablePhysics patch doesn't get skipped.
             Plugin.Instance.skipObject.Add(grabbableObjectRef);
             EnableColliders(true);
@@ -257,7 +313,6 @@ namespace Physics_Items.ItemPhysics
         private Vector3 oldPos;
         private Vector3 oldRelativePosition;
         private float magnitude;
-
         private void MoveWithParent()
         {
 
@@ -273,11 +328,12 @@ namespace Physics_Items.ItemPhysics
                 Plugin.Logger.LogWarning($"Setting {gameObject} Network Transform enabled to {Plugin.Instance.ServerHasMod}");
                 networkTransform.enabled = Plugin.Instance.ServerHasMod;
             }
+            rigidbody.isKinematic = ((grabbableObjectRef.isInShipRoom || grabbableObjectRef.isInElevator) && !StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase) || isPlaced; // TODO: Make items work when ship is moving.
             if (grabbableObjectRef.isInShipRoom || grabbableObjectRef.isInElevator)
             {
-                rigidbody.isKinematic = !StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase || isPlaced; // TODO: Make items work when ship is moving.
                 if (rigidbody.isKinematic && !isPlaced)
                 {
+                    alreadyPickedUp = false;
                     SetPosition();
                     enabled = false;
                 }
@@ -343,12 +399,12 @@ namespace Physics_Items.ItemPhysics
                     float vol;
                     if (force != Vector3.zero)
                     {
-                        vol = Mathf.Min(force.magnitude, oldVolume);
+                        vol = Mathf.Min(force.magnitude, Plugin.Instance.maxCollisionVolume.Value);
                         Plugin.Logger.LogWarning("wat");
                     }
                     else
                     {
-                        vol = Mathf.Clamp(velocityMag, 0.2f, oldVolume); //Mathf.Min(velocityMag, oldVolume); //oldVolume;
+                        vol = Mathf.Clamp(velocityMag, 0.2f, Plugin.Instance.maxCollisionVolume.Value); //Mathf.Min(velocityMag, oldVolume); //oldVolume;
                     }
                     audioSource.volume = vol; //Mathf.Clamp(velocityMag, 0f, audioSource.maxDistance);
                     audioSource.PlayOneShot(clip, audioSource.volume);

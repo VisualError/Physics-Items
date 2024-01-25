@@ -31,14 +31,7 @@ namespace Physics_Items.ModCompatFixes
             {
                 case LethalThings.Dingus dingus:
                     comp.rigidbody.constraints = RigidbodyConstraints.FreezeRotation;
-                    if(grabbableObjectRef.floorYRot == -1)
-                    {
-                        comp.transform.rotation = Quaternion.Euler(grabbableObjectRef.itemProperties.restingRotation.x, grabbableObjectRef.transform.eulerAngles.y, grabbableObjectRef.itemProperties.restingRotation.z);
-                    }
-                    else
-                    {
-                        comp.transform.rotation = Quaternion.Euler(grabbableObjectRef.itemProperties.restingRotation.x, grabbableObjectRef.floorYRot + grabbableObjectRef.itemProperties.floorYOffset + 90f, grabbableObjectRef.itemProperties.restingRotation.z);
-                    }
+                    comp.SetRotation();
                     break;
             }
             On.GameNetcodeStuff.PlayerControllerB.SetObjectAsNoLongerHeld += PlayerControllerB_SetObjectAsNoLongerHeld;
@@ -53,14 +46,7 @@ namespace Physics_Items.ModCompatFixes
                     Utils.Physics.GetPhysicsComponent(dingus.gameObject, out PhysicsComponent physics);
                     if (physics == null) return;
                     if (!physics.alreadyPickedUp) return;
-                    if (dingus.floorYRot == -1)
-                    {
-                        physics.transform.rotation = Quaternion.Euler(dingus.itemProperties.restingRotation.x, dingus.transform.eulerAngles.y, dingus.itemProperties.restingRotation.z);
-                    }
-                    else
-                    {
-                        physics.transform.rotation = Quaternion.Euler(dingus.itemProperties.restingRotation.x, dingus.floorYRot + dingus.itemProperties.floorYOffset + 90f, dingus.itemProperties.restingRotation.z);
-                    }
+                    physics.SetRotation();
                     break;
             }
         }

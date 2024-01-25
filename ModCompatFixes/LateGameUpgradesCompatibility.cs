@@ -2,10 +2,10 @@
 
 namespace Physics_Items.ModCompatFixes
 {
-    internal static class AdvancedCompanyCompatibility
+    internal static class LateGameUpgradesCompatibility
     {
         private static bool? _enabled;
-        private static string modGUID = "com.potatoepet.AdvancedCompany";
+        private static string modGUID = "com.malco.lethalcompany.moreshipupgrades";
 
         public static bool enabled
         {
@@ -22,7 +22,8 @@ namespace Physics_Items.ModCompatFixes
         public static void ApplyFixes()
         {
             Plugin.Logger.LogInfo($"Applying compatibility fixes to: {modGUID}");
-            Plugin.Instance.blockList.Add(typeof(AdvancedCompany.Objects.LightningRod));
+            Plugin.Instance.blockList.Add(typeof(MoreShipUpgrades.UpgradeComponents.Items.Wheelbarrow.StoreWheelbarrow));
+            Plugin.Instance.blockList.Add(typeof(MoreShipUpgrades.UpgradeComponents.Items.Wheelbarrow.ScrapWheelbarrow));
         }
     }
 }

@@ -7,7 +7,7 @@
   "targets": {
     ".NETStandard,Version=v2.1": {},
     ".NETStandard,Version=v2.1/": {
-      "Physics_Items/0.1.1": {
+      "Physics_Items/0.1.11": {
         "dependencies": {
           "BepInEx.Analyzers": "1.0.8",
           "BepInEx.AssemblyPublicizer.MSBuild": "0.4.1",
@@ -20,7 +20,9 @@
           "Unity.Netcode.Runtime": "0.0.0.0",
           "AdvancedCompany": "0.0.0.0",
           "Assembly-CSharp": "0.0.0.0",
+          "LethalConfig": "0.0.0.0",
           "LethalThings": "1.0.0.0",
+          "MoreShipUpgrades": "0.0.0.0",
           "NeedyCats": "1.0.0.0",
           "Spantle.ThrowEverything": "0.3.0.0"
         },
@@ -438,11 +440,27 @@
           }
         }
       },
+      "LethalConfig/0.0.0.0": {
+        "runtime": {
+          "LethalConfig.dll": {
+            "assemblyVersion": "0.0.0.0",
+            "fileVersion": "0.0.0.0"
+          }
+        }
+      },
       "LethalThings/1.0.0.0": {
         "runtime": {
           "LethalThings.dll": {
             "assemblyVersion": "1.0.0.0",
             "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "MoreShipUpgrades/0.0.0.0": {
+        "runtime": {
+          "MoreShipUpgrades.dll": {
+            "assemblyVersion": "0.0.0.0",
+            "fileVersion": "0.0.0.0"
           }
         }
       },
@@ -729,7 +747,7 @@
     }
   },
   "libraries": {
-    "Physics_Items/0.1.1": {
+    "Physics_Items/0.1.11": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
@@ -1037,7 +1055,17 @@
       "serviceable": false,
       "sha512": ""
     },
+    "LethalConfig/0.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
     "LethalThings/1.0.0.0": {
+      "type": "reference",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "MoreShipUpgrades/0.0.0.0": {
       "type": "reference",
       "serviceable": false,
       "sha512": ""

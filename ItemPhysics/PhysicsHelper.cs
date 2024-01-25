@@ -9,6 +9,7 @@ namespace Physics_Items.ItemPhysics
     public class PhysicsHelper : MonoBehaviour
     {
         PhysicsComponent physicsComponentRef;
+        Type cachedType;
         void Awake()
         {
             if(!TryGetComponent(out physicsComponentRef))
@@ -17,10 +18,25 @@ namespace Physics_Items.ItemPhysics
                 Destroy(this);
                 return;
             }
+            cachedType = physicsComponentRef.GetType();
         }
+        public bool why = false;
         // wahhh
         void Update()
         {
+            if (Plugin.Instance.blockList.Contains(cachedType))
+            {
+                Destroy(physicsComponentRef);
+                physicsComponentRef.enabled = false;
+                Destroy(this);
+            }
+            if (!physicsComponentRef.alreadyPickedUp && !physicsComponentRef.alreadyPickedUp != Plugin.Instance.physicsOnPickup.Value && physicsComponentRef.grabbableObjectRef.hasHitGround && why)
+            {
+                physicsComponentRef.alreadyPickedUp = true;
+                physicsComponentRef.enabled = true;
+                why = false;
+                physicsComponentRef.SetRotation();
+            }
             if (!physicsComponentRef.alreadyPickedUp) return;
             if (physicsComponentRef.rigidbody.isKinematic && (!StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase) && (physicsComponentRef.grabbableObjectRef.isInShipRoom || physicsComponentRef.grabbableObjectRef.isInElevator) && !physicsComponentRef.isPlaced)
             {

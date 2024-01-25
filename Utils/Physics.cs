@@ -24,7 +24,7 @@ namespace Physics_Items.Utils
             else
             {
                 physicsComponent = gameObj.GetComponent<PhysicsComponent>();
-                physicsComponents.Add(gameObj, physicsComponent);
+                physicsComponents[gameObj] = physicsComponent;
             }
             return physicsComponent != null;
         }
