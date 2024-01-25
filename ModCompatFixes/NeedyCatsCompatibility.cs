@@ -25,7 +25,7 @@ namespace Physics_Items.ModCompatFixes
         public static void ApplyFixes()
         {
             Plugin.Logger.LogInfo($"Applying compatibility fixes to: {modGUID}");
-            Plugin.Instance.blockList.Add(typeof(NeedyCats.NeedyCatProp));
+            Plugin.Instance.manualSkipList.Add(typeof(NeedyCats.NeedyCatProp));
         }
     }
 }

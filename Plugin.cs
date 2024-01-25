@@ -100,18 +100,11 @@ namespace Physics_Items
             #region "MonoMod Hooks"
 
             ItemPhysics.Environment.Landmine.Init();
-
-            On.GrabbableObject.Start += GrabbableObject_Start;
-            On.GrabbableObject.Update += GrabbableObject_Update;
-            On.GrabbableObject.EquipItem += GrabbableObject_EquipItem;
-            On.GrabbableObject.EnablePhysics += GrabbableObject_EnablePhysics;
-            On.GrabbableObject.OnPlaceObject += GrabbableObject_OnPlaceObject;
-            On.GrabbableObject.ItemActivate += GrabbableObject_ItemActivate;
-            On.GrabbableObject.GrabItem += GrabbableObject_GrabItem;
+            GrabbablePatches.Init();
             On.GameNetcodeStuff.PlayerControllerB.PlaceGrabbableObject += PlayerControllerB_PlaceGrabbableObject;
             On.GameNetcodeStuff.PlayerControllerB.SetObjectAsNoLongerHeld += PlayerControllerB_SetObjectAsNoLongerHeld;
-            On.MenuManager.Awake += MenuManager_Awake;
             On.GameNetcodeStuff.PlayerControllerB.DropAllHeldItems += PlayerControllerB_DropAllHeldItems;
+            On.MenuManager.Awake += MenuManager_Awake;
             #endregion
         }
 
@@ -144,59 +137,6 @@ namespace Physics_Items
             }
         }
 
-        private void PlayerControllerB_DropAllHeldItems(On.GameNetcodeStuff.PlayerControllerB.orig_DropAllHeldItems orig, GameNetcodeStuff.PlayerControllerB self, bool itemsFall, bool disconnecting)
-        {
-            var oldItems = new List<GrabbableObject>(self.ItemSlots);
-            orig(self, itemsFall, disconnecting);
-            for (int i = 0; i < oldItems.Count; i++)
-            {
-                GrabbableObject item = oldItems[i];
-                if (item is null) continue;
-                if (Utils.Physics.GetPhysicsComponent(item.gameObject, out PhysicsComponent comp))
-                {
-                    skipObject.Add(item);
-                    comp.physicsHelperRef.why = true;
-                    comp.alreadyPickedUp = false;
-                    comp.enabled = false;
-                }
-            }
-        }
-
-        private void GrabbableObject_GrabItem(On.GrabbableObject.orig_GrabItem orig, GrabbableObject self)
-        {
-            orig(self);
-            Utils.Physics.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp);
-            if (comp == null) return;
-            comp.alreadyPickedUp = true;
-        }
-
-        private void StartOfRound_SyncAlreadyHeldObjectsClientRpc(On.StartOfRound.orig_SyncAlreadyHeldObjectsClientRpc orig, StartOfRound self, NetworkObjectReference[] gObjects, int[] playersHeldBy, int[] itemSlotNumbers, int[] isObjectPocketed, int syncWithClient)
-        {
-            Logger.LogWarning("CALL!");
-            orig(self, gObjects, playersHeldBy, itemSlotNumbers, isObjectPocketed, syncWithClient);
-            List<GrabbableObject> grabbableList = FindObjectsByType<GrabbableObject>(FindObjectsInactive.Exclude, FindObjectsSortMode.None).ToList();
-            foreach (GrabbableObject grab in grabbableList)
-            {
-                grab.transform.parent = self.elevatorTransform;
-                //RoundManager.Instance.CollectNewScrapForThisRound(grab);
-                GameNetworkManager.Instance.localPlayerController.SetItemInElevator(false, false, grab);
-                HUDManager.Instance.AddNewScrapFoundToDisplay(grab);
-                //grab.OnBroughtToShip();
-            }
-        }
-
-        private void PlayerControllerB_PlaceGrabbableObject(On.GameNetcodeStuff.PlayerControllerB.orig_PlaceGrabbableObject orig, GameNetcodeStuff.PlayerControllerB self, Transform parentObject, Vector3 positionOffset, bool matchRotationOfParent, GrabbableObject placeObject)
-        {
-            orig(self, parentObject, positionOffset, matchRotationOfParent, placeObject);
-            if (skipObject.Contains(placeObject)) return;
-            Utils.Physics.GetPhysicsComponent(placeObject.gameObject, out PhysicsComponent physics);
-            if (physics == null) return;
-            physics.isPlaced = true;
-            physics.rigidbody.isKinematic = true;
-            placeObject.gameObject.transform.rotation = Quaternion.Euler(placeObject.itemProperties.restingRotation.x, placeObject.floorYRot + placeObject.itemProperties.floorYOffset + 90f, placeObject.itemProperties.restingRotation.z);
-            placeObject.gameObject.transform.localPosition = positionOffset;
-        }
-
         private void InitializeNetworkTransformAndBlocklistConfig()
         {
             if (Initialized) return;
@@ -209,7 +149,6 @@ namespace Physics_Items
                     NetworkTransform netTransform = grabbableObject.gameObject.AddComponent<NetworkTransform>();
                     netTransform.enabled = false;
                 }
-                    
             }
             Initialized = true;
         }
@@ -229,43 +168,37 @@ namespace Physics_Items
             Logger.LogInfo($"Adding: {grabbableObject.itemProperties.itemName} to config");
         }
 
-        // TODO: Optimize code
-        private PhysicsComponent AddPhysicsComponent(GrabbableObject grabbableObject)
+        #region "MonoMod Patches"
+        private void PlayerControllerB_DropAllHeldItems(On.GameNetcodeStuff.PlayerControllerB.orig_DropAllHeldItems orig, GameNetcodeStuff.PlayerControllerB self, bool itemsFall, bool disconnecting)
         {
-            if (grabbableObject.gameObject.GetComponent<NetworkObject>() == null) return null;
-            if (grabbableObject.gameObject.GetComponent<Rigidbody>() != null || grabbableObject.gameObject.GetComponentInChildren<Rigidbody>() != null)
+            var oldItems = new List<GrabbableObject>(self.ItemSlots);
+            orig(self, itemsFall, disconnecting);
+            for (int i = 0; i < oldItems.Count; i++)
             {
-                Logger.LogWarning($"Skipping Item with Rigidbody: {grabbableObject.gameObject}");
-                grabbableObject.gameObject.AddComponent<DestroyHelper>();
-                skipObject.Add(grabbableObject);
-                return null;
-            }else if (blockList.Contains(grabbableObject.GetType()))
-            {
-                if (overrideAllModdedItemPhysics.Value) return null;
-                Logger.LogWarning($"Skipping Blocked Item: {grabbableObject.gameObject}");
-                grabbableObject.gameObject.AddComponent<DestroyHelper>();
-                skipObject.Add(grabbableObject);
-                return null;
+                GrabbableObject item = oldItems[i];
+                if (item is null) continue;
+                if (Utils.Physics.GetPhysicsComponent(item.gameObject, out PhysicsComponent comp))
+                {
+                    skipObject.Add(item);
+                    comp.physicsHelperRef.why = true;
+                    comp.alreadyPickedUp = false;
+                    comp.enabled = false;
+                }
             }
-            PhysicsComponent component;
-            if (!grabbableObject.gameObject.TryGetComponent(out component))
-            {
-                component = grabbableObject.gameObject.AddComponent<PhysicsComponent>();
-            }
-            if (component == null)
-            {
-                Logger.LogError($"Physics Component of {grabbableObject.gameObject} is null! This shouldn't happen!");
-                return null;
-            }
-            Logger.LogInfo($"Successfully added Physics Component to {grabbableObject.gameObject}.");
-            if (grabbableObject.TryGetComponent(out Collider collider))
-            {
-                collider.isTrigger = false; // I'm not sure if this will break anything. I'm doing this because the Teeth item spawns out of existence if isTrigger is true.
-            }
-            return component;
         }
 
-        #region "MonoMod Patches"
+        private void PlayerControllerB_PlaceGrabbableObject(On.GameNetcodeStuff.PlayerControllerB.orig_PlaceGrabbableObject orig, GameNetcodeStuff.PlayerControllerB self, Transform parentObject, Vector3 positionOffset, bool matchRotationOfParent, GrabbableObject placeObject)
+        {
+            orig(self, parentObject, positionOffset, matchRotationOfParent, placeObject);
+            if (skipObject.Contains(placeObject)) return;
+            Utils.Physics.GetPhysicsComponent(placeObject.gameObject, out PhysicsComponent physics);
+            if (physics == null) return;
+            physics.isPlaced = true;
+            physics.rigidbody.isKinematic = true;
+            placeObject.gameObject.transform.rotation = Quaternion.Euler(placeObject.itemProperties.restingRotation.x, placeObject.floorYRot + placeObject.itemProperties.floorYOffset + 90f, placeObject.itemProperties.restingRotation.z);
+            placeObject.gameObject.transform.localPosition = positionOffset;
+        }
+
         private void PlayerControllerB_SetObjectAsNoLongerHeld(On.GameNetcodeStuff.PlayerControllerB.orig_SetObjectAsNoLongerHeld orig, GameNetcodeStuff.PlayerControllerB self, bool droppedInElevator, bool droppedInShipRoom, Vector3 targetFloorPosition, GrabbableObject dropObject, int floorYRot)
         {
             orig(self, droppedInElevator, droppedInElevator, targetFloorPosition, dropObject, floorYRot);
@@ -284,84 +217,12 @@ namespace Physics_Items
             comp.rigidbody.AddForce(force, ForceMode.Impulse);
         }
 
-        private void GrabbableObject_ItemActivate(On.GrabbableObject.orig_ItemActivate orig, GrabbableObject self, bool used, bool buttonDown)
-        {
-            // TODO: Don't let players interact with certain objects if the ship is landing
-            orig(self, used, buttonDown);
-        }
-
-        private void GrabbableObject_OnPlaceObject(On.GrabbableObject.orig_OnPlaceObject orig, GrabbableObject self)
-        {
-            orig(self);
-            if (skipObject.Contains(self)) return;
-            Utils.Physics.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp);
-            if (comp == null) return;
-            comp.EnableColliders(true);
-            comp.isPlaced = true;
-            comp.rigidbody.isKinematic = true;
-        }
         private void MenuManager_Awake(On.MenuManager.orig_Awake orig, MenuManager self)
         {
             orig(self);
             InitializeNetworkTransformAndBlocklistConfig();
         }
 
-        private void GrabbableObject_EnablePhysics(On.GrabbableObject.orig_EnablePhysics orig, GrabbableObject self, bool enable)
-        {
-            if (skipObject.Contains(self))
-            {
-                orig(self, enable);
-            }
-            if (Utils.Physics.GetPhysicsComponent(self.gameObject, out PhysicsComponent component))
-            {
-                component.EnableColliders(enable);
-                component.rigidbody.isKinematic = !enable;
-                if (enable)
-                {
-                    component.isPlaced = false;
-                }
-            }
-        }
-
-        private void GrabbableObject_EquipItem(On.GrabbableObject.orig_EquipItem orig, GrabbableObject self)
-        {
-            orig(self);
-            if (skipObject.Contains(self)) return;
-            self.transform.parent = null;
-            self.EnablePhysics(false);
-        }
-
-        private void GrabbableObject_Start(On.GrabbableObject.orig_Start orig, GrabbableObject self)
-        {
-            if (Utils.Physics.GetPhysicsComponent(self.gameObject) != null) return;
-            if (physicsOnPickup.Value)
-            {
-                skipObject.Add(self);
-            }
-            PhysicsComponent comp = AddPhysicsComponent(self);
-            if (comp != null)
-            {
-                comp.enabled = false;
-                comp.SetPosition();
-            }
-            orig(self);
-        }
-
-        private void GrabbableObject_Update(On.GrabbableObject.orig_Update orig, GrabbableObject self)
-        {
-            if (skipObject.Contains(self))
-            {
-                orig(self);
-                return;
-            }
-            if (self == null) return;
-            self.fallTime = 1.0f;
-            self.reachedFloorTarget = true;
-            var wasHeld = self.isHeld;
-            self.isHeld = true;
-            orig(self);
-            self.isHeld = wasHeld;
-        }
         #endregion
     }
 }

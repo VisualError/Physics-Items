@@ -22,7 +22,7 @@ namespace Physics_Items.ModCompatFixes
         public static void ApplyFixes()
         {
             Plugin.Logger.LogInfo($"Applying compatibility fixes to: {modGUID}");
-            Plugin.Instance.blockList.Add(typeof(AdvancedCompany.Objects.LightningRod));
+            Plugin.Instance.manualSkipList.Add(typeof(AdvancedCompany.Objects.LightningRod));
         }
     }
 }

@@ -22,8 +22,8 @@ namespace Physics_Items.ModCompatFixes
         public static void ApplyFixes()
         {
             Plugin.Logger.LogInfo($"Applying compatibility fixes to: {modGUID}");
-            Plugin.Instance.blockList.Add(typeof(MoreShipUpgrades.UpgradeComponents.Items.Wheelbarrow.StoreWheelbarrow));
-            Plugin.Instance.blockList.Add(typeof(MoreShipUpgrades.UpgradeComponents.Items.Wheelbarrow.ScrapWheelbarrow));
+            Plugin.Instance.manualSkipList.Add(typeof(MoreShipUpgrades.UpgradeComponents.Items.Wheelbarrow.StoreWheelbarrow));
+            Plugin.Instance.manualSkipList.Add(typeof(MoreShipUpgrades.UpgradeComponents.Items.Wheelbarrow.ScrapWheelbarrow));
         }
     }
 }

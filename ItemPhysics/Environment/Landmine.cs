@@ -27,7 +27,6 @@ namespace Physics_Items.ItemPhysics.Environment
                 Vector3 normal = (local).normalized;
                 if (Utils.Physics.GetPhysicsComponent(list[i].gameObject, out PhysicsComponent physics))
                 {
-                    var force = normal * MathF.Min(magnitude * 64 * physics.throwForce, physics.throwForce); //Mathf.Min(Distance * throwForce, comp.rigidbody.mass * 10)
                     physics.alreadyPickedUp = true;
                     physics.grabbableObjectRef.EnablePhysics(true);
                     //physics.rigidbody.AddForce(normal * magnitude * 32f, ForceMode.Impulse); // 64 might be more accurate? idk.
