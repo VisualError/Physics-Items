@@ -212,7 +212,7 @@ namespace Physics_Items
         {
             var oldItems = new List<GrabbableObject>(self.ItemSlots);
             orig(self, itemsFall, disconnecting);
-            if (!Utils.Physics.GetPhysicsComponent(self.gameObject)) return;
+            if (Utils.Physics.GetPhysicsComponent(self.gameObject) == null) return;
             for (int i = 0; i < oldItems.Count; i++)
             {
                 GrabbableObject item = oldItems[i];

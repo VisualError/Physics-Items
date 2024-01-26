@@ -1,4 +1,5 @@
-﻿using Physics_Items.ItemPhysics;
+﻿using GameNetcodeStuff;
+using Physics_Items.ItemPhysics;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -9,6 +10,7 @@ namespace Physics_Items.Utils
     internal class Physics
     {
         internal static Dictionary<GameObject, PhysicsComponent> physicsComponents = new Dictionary<GameObject, PhysicsComponent>();
+        internal static List<PlayerControllerB> playerControllerBs = new List<PlayerControllerB>();
         internal static PhysicsComponent GetPhysicsComponent(GameObject gameObj)
         {
             if (physicsComponents.ContainsKey(gameObj)) return physicsComponents[gameObj];
