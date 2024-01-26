@@ -1,5 +1,4 @@
 ﻿using BepInEx;
-using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
@@ -9,17 +8,11 @@ using Physics_Items.ItemPhysics;
 using Physics_Items.Utils;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
-using System.Xml.Linq;
-using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
 using System.IO;
 using System.Reflection;
-using AdvancedCompany.Config;
-using UnityEngine.Assertions.Must;
-using UnityEngine.Rendering.VirtualTexturing;
 
 namespace Physics_Items
 {
@@ -103,6 +96,7 @@ namespace Physics_Items
             maxCollisionVolume = Config.Bind("Physics Behaviour", "Max Collision Volume", 4f, "Sets the max volume each collision should have.");
             DebuggingStuff = Config.Bind("Technical", "Debug", false, "Debug mode");
             customBlockList.SettingChanged += CustomBlockList_SettingChanged;
+            Config.SettingChanged += Config_SettingChanged;
             if (InitializeConfigs.Value)
             {
                 // Delete the existing config file
@@ -128,10 +122,15 @@ namespace Physics_Items
             #endregion
         }
 
+        private void Config_SettingChanged(object sender, SettingChangedEventArgs e)
+        {
+            Logger.LogWarning($"Changed: {e.ChangedSetting.Definition.Key} to {e.ChangedSetting.GetSerializedValue()}");
+        }
+
         private void CustomBlockList_SettingChanged(object sender, SettingChangedEventArgs e)
         {
             if (overrideAllItemPhysics.Value) return;
-            Logger.LogWarning($"Changed: {e.ChangedSetting.Definition.Section} to {e.ChangedSetting.GetSerializedValue()}");
+            Logger.LogWarning($"Changed Blocklist: {e.ChangedSetting.Definition.Section} to {e.ChangedSetting.GetSerializedValue()}");
             var grabbable = allItemsDictionary[e.ChangedSetting.Definition.Section];
             List<GrabbableObject> grabbableList = FindObjectsByType<GrabbableObject>(FindObjectsInactive.Exclude, FindObjectsSortMode.None).ToList();
             if (e.ChangedSetting.GetSerializedValue() == "true")
@@ -163,8 +162,8 @@ namespace Physics_Items
             if (Initialized) return;
             foreach (GrabbableObject grabbableObject in Resources.FindObjectsOfTypeAll<GrabbableObject>())
             {
-                //AddPhysicsComponent(grabbableObject);
                 InitializeBlocklistConfig(grabbableObject);
+                if (manualSkipList.Contains(grabbableObject.GetType())) continue;
                 if (grabbableObject.gameObject.GetComponent<NetworkTransform>() == null) // This is so jank lmfao
                 {
                     NetworkTransform netTransform = grabbableObject.gameObject.AddComponent<NetworkTransform>();
@@ -178,6 +177,10 @@ namespace Physics_Items
         private void InitializeBlocklistConfig(GrabbableObject grabbableObject)
         {
             var value = false;
+            if(grabbableObject == null)
+            {
+                return;
+            }
             if (grabbableObject.itemProperties == null)
             {
                 Logger.LogWarning("Skipping item with no item properties");
@@ -209,6 +212,7 @@ namespace Physics_Items
         {
             var oldItems = new List<GrabbableObject>(self.ItemSlots);
             orig(self, itemsFall, disconnecting);
+            if (!Utils.Physics.GetPhysicsComponent(self.gameObject)) return;
             for (int i = 0; i < oldItems.Count; i++)
             {
                 GrabbableObject item = oldItems[i];

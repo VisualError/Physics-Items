@@ -1,4 +1,5 @@
 ﻿using GameNetcodeStuff;
+using MoreShipUpgrades.Patches;
 using Physics_Items.ModCompatFixes;
 using Physics_Items.NamedMessages;
 using System;
@@ -81,15 +82,13 @@ namespace Physics_Items.ItemPhysics
             }
         }
         public int gridSize = 5;
-        public float cellSize = .5f;
-        public Collider[] results = new Collider[5];
+        public float cellSize = 2f;
+        public Collider[] results = new Collider[3];
 
         public void FixPosition()
         {
             if (rigidbody.isKinematic) return;
-            Plugin.Logger.LogWarning("trying to fix pos");
             Dictionary<Vector3, GameObject> primitives = new Dictionary<Vector3, GameObject>();
-            bool[,] foundCell = new bool[gridSize, gridSize];
             Vector3 closestFreeSpot = Vector3.zero;
             float minDistance = Mathf.Infinity;
             // Populate the grid
@@ -97,8 +96,6 @@ namespace Physics_Items.ItemPhysics
             {
                 for (int y = 0; y < gridSize; y++)
                 {
-                    if (foundCell[x, y]) continue;
-                    foundCell[x, y] = true;
                     // Calculate the center of the cell
                     Vector3 cellCenter = new Vector3((x - gridSize / 2) * cellSize /2, 0, (y - gridSize / 2) * cellSize/2) + new Vector3(cellSize, 0, cellSize) * 0.5f;
                     if (cellCenter == new Vector3(cellSize, 0, cellSize) * 0.5f)
@@ -124,7 +121,8 @@ namespace Physics_Items.ItemPhysics
                         material.shader = Shader.Find("HDRP/Lit");
                     }
                     // Check if there's an obstacle at the cell center
-                    if (Physics.OverlapBoxNonAlloc(cellCenter, halfExtents, results, Quaternion.identity, 2318, QueryTriggerInteraction.Ignore) <= 0)
+                    int overlap = Physics.OverlapBoxNonAlloc(cellCenter, halfExtents, results, Quaternion.identity, 2318, QueryTriggerInteraction.Ignore);
+                    if (overlap <= 1 || overlap <= 0)
                     {
                         if (Plugin.Instance.DebuggingStuff.Value) Plugin.Logger.LogWarning($"Found free spot at: {cellCenter}");
                         if(material != null) material.color = Color.yellow;
@@ -217,7 +215,9 @@ namespace Physics_Items.ItemPhysics
                 scanNodeRigid.isKinematic = true;
                 scanNodeRigid.useGravity = false;
             }
+            rigidbody.velocity = Vector3.zero;
             FixPosition();
+            rigidbody.velocity = Vector3.zero;
         }
 
         void UninitializeVariables()
@@ -468,7 +468,7 @@ namespace Physics_Items.ItemPhysics
 
         protected virtual void OnCollisionExit(Collision collision)
         {
-            if (collision.gameObject.layer == 26 && collision.collider == GameNetworkManager.Instance.localPlayerController.playerCollider)
+            if (collision.gameObject.layer == 26)
             {
                 slow = false;
                 GameNetworkManager.Instance.localPlayerController.isMovementHindered = 0;
@@ -486,7 +486,7 @@ namespace Physics_Items.ItemPhysics
                 return;
             }
             // Calculate the force that the player character would experience
-            if (collision.gameObject.layer == 26 && collision.collider == GameNetworkManager.Instance.localPlayerController.playerCollider)
+            if (collision.gameObject.layer == 26)
             {
                 slow = true;
             }

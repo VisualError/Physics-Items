@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Unity.Netcode;
 using UnityEngine;
@@ -96,7 +97,11 @@ namespace Physics_Items.ItemPhysics
             orig(self);
             if (!Utils.Physics.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp)) return;
             comp.alreadyPickedUp = true;
-            comp.slow = false;
+            if (comp.slow)
+            {
+                GameNetworkManager.Instance.localPlayerController.isMovementHindered = 0;
+                comp.slow = false;
+            }
         }
 
         private static void GrabbableObject_ItemActivate(On.GrabbableObject.orig_ItemActivate orig, GrabbableObject self, bool used, bool buttonDown)
