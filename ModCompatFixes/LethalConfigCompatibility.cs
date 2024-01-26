@@ -47,7 +47,7 @@ namespace Physics_Items.ModCompatFixes
                 list.Add(new AutoConfigGenerator.AutoConfigItem
                 {
                     ConfigItem = configItem,
-                    Assembly = Assembly.GetExecutingAssembly()
+                    Assembly = Plugin.Instance.myAssembly
                 });
                 __result = list.ToArray();
             }

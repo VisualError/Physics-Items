@@ -9,6 +9,7 @@ namespace Physics_Items.ItemPhysics
     public class PhysicsHelper : MonoBehaviour
     {
         PhysicsComponent physicsComponentRef;
+        GrabbableObject grabbableObjectRef;
         Type cachedType;
         void Awake()
         {
@@ -18,18 +19,14 @@ namespace Physics_Items.ItemPhysics
                 Destroy(this);
                 return;
             }
+            grabbableObjectRef = physicsComponentRef.grabbableObjectRef;
             cachedType = physicsComponentRef.GetType();
         }
         public bool why = false;
         // wahhh
         void Update()
         {
-            if (Plugin.Instance.blockList.Contains(cachedType))
-            {
-                Destroy(physicsComponentRef);
-                physicsComponentRef.enabled = false;
-                Destroy(this);
-            }
+            if (!grabbableObjectRef.isHeld && Plugin.Instance.physicsOnPickup.Value || !physicsComponentRef.alreadyPickedUp) return; //gufdsu guhdsahbdhg
             if (!physicsComponentRef.alreadyPickedUp && !physicsComponentRef.alreadyPickedUp != Plugin.Instance.physicsOnPickup.Value && physicsComponentRef.grabbableObjectRef.hasHitGround && why)
             {
                 physicsComponentRef.alreadyPickedUp = true;

@@ -1,17 +1,13 @@
 ﻿using GameNetcodeStuff;
-using Mono.Cecil;
-using MonoMod.Utils.Cil;
 using Physics_Items.ModCompatFixes;
 using Physics_Items.NamedMessages;
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using System.Text;
 using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
-using UnityEngine.Experimental.Audio;
+using static UnityEngine.ParticleSystem.PlaybackState;
+using Collision = UnityEngine.Collision;
 
 namespace Physics_Items.ItemPhysics
 {
@@ -36,7 +32,7 @@ namespace Physics_Items.ItemPhysics
 
         public AudioSource audioSource;
 
-        public LungProp lungPropRef; // I have this so I don't have to get component or do an is cast.
+        public LungProp apparatusRef; // I have this so I don't have to get component or do an is cast.
         void Awake()
         {
             string a = IsHostOrServer ? "Host" : "Client";
@@ -70,7 +66,7 @@ namespace Physics_Items.ItemPhysics
             }
             if (grabbableObjectRef is LungProp lungProp && lungProp != null)
             {
-                lungPropRef = lungProp;
+                apparatusRef = lungProp;
             }
             audioSource = gameObject.GetComponent<AudioSource>();
             physicsHelperRef = gameObject.AddComponent<PhysicsHelper>();
@@ -78,54 +74,94 @@ namespace Physics_Items.ItemPhysics
             oldVolume = audioSource.volume;
             throwForce = rigidbody.mass * 10f;
             up = grabbableObjectRef.itemProperties.verticalOffset * Vector3.up;
-
+            grabbableObjectRef.itemProperties.syncDiscardFunction = true; // testing.
             if (LethalThingsCompatibility.enabled)
             {
                 LethalThingsCompatibility.ApplyFixes(this);
             }
-            //StartCoroutine(FixPosition());
-            
         }
-        public int gridSize = 10;
-        public float cellSize = 1f;
-        public LayerMask obstacleLayer;
+        public int gridSize = 5;
+        public float cellSize = .5f;
+        public Collider[] results = new Collider[5];
 
-        public IEnumerator FixPosition()
+        public void FixPosition()
         {
-            // Initialize the grid
-            bool[,] grid = new bool[gridSize, gridSize];
-
+            if (rigidbody.isKinematic) return;
+            Plugin.Logger.LogWarning("trying to fix pos");
+            Dictionary<Vector3, GameObject> primitives = new Dictionary<Vector3, GameObject>();
+            bool[,] foundCell = new bool[gridSize, gridSize];
+            Vector3 closestFreeSpot = Vector3.zero;
+            float minDistance = Mathf.Infinity;
             // Populate the grid
             for (int x = 0; x < gridSize; x++)
             {
                 for (int y = 0; y < gridSize; y++)
                 {
+                    if (foundCell[x, y]) continue;
+                    foundCell[x, y] = true;
                     // Calculate the center of the cell
-                    Vector3 cellCenter = new Vector3(x * cellSize, 0, y * cellSize) + new Vector3(cellSize, 0, cellSize) * 0.5f;
+                    Vector3 cellCenter = new Vector3((x - gridSize / 2) * cellSize /2, 0, (y - gridSize / 2) * cellSize/2) + new Vector3(cellSize, 0, cellSize) * 0.5f;
+                    if (cellCenter == new Vector3(cellSize, 0, cellSize) * 0.5f)
+                    {
+                        cellCenter = Vector3.zero;
+                    }
+                    // Calculate the half extents of the box
+                    Vector3 halfExtents = new Vector3(cellSize / 2, cellSize / 2, cellSize / 2);
 
+                    // Add the item's position to the cell center
+                    cellCenter += transform.position;
+                    Material material = null;
+                    if (Plugin.Instance.DebuggingStuff.Value)
+                    {
+                        primitives[cellCenter] = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        primitives[cellCenter].layer = 6;
+                        primitives[cellCenter].transform.position = cellCenter;
+                        primitives[cellCenter].transform.localScale = halfExtents;
+                        primitives[cellCenter].GetComponent<Collider>().isTrigger = true;
+                        primitives[cellCenter].GetComponent<Collider>().enabled = false;
+                        Plugin.Logger.LogInfo($"Found cell: {cellCenter}");
+                        material = primitives[cellCenter].GetComponent<Renderer>().material;
+                        material.shader = Shader.Find("HDRP/Lit");
+                    }
                     // Check if there's an obstacle at the cell center
-                    if (Physics.OverlapSphere(cellCenter, cellSize * 0.5f, obstacleLayer).Length <= 0)
+                    if (Physics.OverlapBoxNonAlloc(cellCenter, halfExtents, results, Quaternion.identity, 2318, QueryTriggerInteraction.Ignore) <= 0)
                     {
-                        // No obstacle, mark the cell as free
-                        grid[x, y] = true;
+                        if (Plugin.Instance.DebuggingStuff.Value) Plugin.Logger.LogWarning($"Found free spot at: {cellCenter}");
+                        if(material != null) material.color = Color.yellow;
+                        float distance = Vector3.Distance(cellCenter, transform.position);
+                        if (distance < minDistance)
+                        {
+                            if (Plugin.Instance.DebuggingStuff.Value) Plugin.Logger.LogWarning($"Found closer distance at: {cellCenter}");
+                            minDistance = distance;
+                            closestFreeSpot = cellCenter;
+                            if (closestFreeSpot == transform.position) break;
+                        }
                     }
                 }
             }
-
-            // Find a free cell
-            for (int x = 0; x < gridSize; x++)
+            if (minDistance != Mathf.Infinity)
             {
-                for (int y = 0; y < gridSize; y++)
+                if (Plugin.Instance.DebuggingStuff.Value)
                 {
-                    if (grid[x, y])
-                    {
-                        // Found a free cell, move the object here
-                        transform.position = new Vector3(x * cellSize, 0, y * cellSize) + new Vector3(cellSize, 0, cellSize) * 0.5f;
-                        break;
-                    }
+                    Plugin.Logger.LogWarning($"Moving item to closest free spot at: {closestFreeSpot}");
+                    GameObject originalPosition = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    originalPosition.layer = 6;
+                    originalPosition.transform.position = transform.position;
+                    originalPosition.transform.localScale = new Vector3(cellSize / 2, cellSize / 2, cellSize / 2);
+                    var testMaterial = originalPosition.GetComponent<Renderer>().material;
+                    testMaterial.shader = Shader.Find("HDRP/Lit");
+                    testMaterial.color = Color.blue;
+                    testMaterial.color = new Color(testMaterial.color.r, testMaterial.color.g, testMaterial.color.b, 0.5f); // 50% transparency
+                    originalPosition.GetComponent<Collider>().isTrigger = true;
+                    originalPosition.GetComponent<Collider>().enabled = false;
+                }
+                transform.position = closestFreeSpot;
+                if (Plugin.Instance.DebuggingStuff.Value && primitives.ContainsKey(closestFreeSpot))
+                {
+                    Material material = primitives[closestFreeSpot].GetComponent<Renderer>().material;
+                    material.color = Color.green;
                 }
             }
-            yield break;
         }
         public void SetPosition()
         {
@@ -151,15 +187,15 @@ namespace Physics_Items.ItemPhysics
         void InitializeVariables()
         {
 
-            SetPosition();
+            //SetPosition();
             alreadyPickedUp = !Plugin.Instance.physicsOnPickup.Value;
             grabbableObjectRef.itemProperties.itemSpawnsOnGround = Plugin.Instance.physicsOnPickup.Value;
             //rigidbody.detectCollisions = true;
-            rigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
+            rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             rigidbody.drag = 0.1f;
-            if (lungPropRef != null)
+            if (apparatusRef != null)
             {
-                rigidbody.isKinematic = lungPropRef.isLungDocked || lungPropRef.isLungDockedInElevator || isPlaced;
+                rigidbody.isKinematic = apparatusRef.isLungDocked || apparatusRef.isLungDockedInElevator || isPlaced;
             }
             else
             {
@@ -181,6 +217,7 @@ namespace Physics_Items.ItemPhysics
                 scanNodeRigid.isKinematic = true;
                 scanNodeRigid.useGravity = false;
             }
+            FixPosition();
         }
 
         void UninitializeVariables()
@@ -322,13 +359,26 @@ namespace Physics_Items.ItemPhysics
         // TODO: Learn how to use rigidbodies efficiently.
         protected virtual void Update()
         {
-            if(oldValue != Plugin.Instance.ServerHasMod)
+            if(slow)
+            {
+                GameNetworkManager.Instance.localPlayerController.isMovementHindered = (int)(rigidbody.mass / 1f) - 1;
+            }
+            if (oldValue != Plugin.Instance.ServerHasMod)
             {
                 oldValue = Plugin.Instance.ServerHasMod;
                 Plugin.Logger.LogWarning($"Setting {gameObject} Network Transform enabled to {Plugin.Instance.ServerHasMod}");
                 networkTransform.enabled = Plugin.Instance.ServerHasMod;
             }
-            rigidbody.isKinematic = ((grabbableObjectRef.isInShipRoom || grabbableObjectRef.isInElevator) && !StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase) || isPlaced; // TODO: Make items work when ship is moving.
+            if (apparatusRef != null) // I want to shoot the apparatus with a water gun.
+            {
+                bool isDocked = apparatusRef.isLungDocked || apparatusRef.isLungDockedInElevator || (!StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase || isPlaced);
+                if (rigidbody.isKinematic == isDocked) return;
+                rigidbody.isKinematic = isDocked;
+            }
+            else
+            {
+                rigidbody.isKinematic = ((grabbableObjectRef.isInShipRoom || grabbableObjectRef.isInElevator) && !StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase) || isPlaced; // TODO: Make items work when ship is moving.
+            }
             if (grabbableObjectRef.isInShipRoom || grabbableObjectRef.isInElevator)
             {
                 if (rigidbody.isKinematic && !isPlaced)
@@ -337,12 +387,6 @@ namespace Physics_Items.ItemPhysics
                     SetPosition();
                     enabled = false;
                 }
-            }
-            if (lungPropRef != null)
-            {
-                bool isDocked = lungPropRef.isLungDocked || lungPropRef.isLungDockedInElevator || (!StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase || isPlaced);
-                if (rigidbody.isKinematic == isDocked) return;
-                rigidbody.isKinematic = isDocked;
             }
         }
 
@@ -388,7 +432,7 @@ namespace Physics_Items.ItemPhysics
                 var throwForce_ = Mathf.Min(throwForce, 36f);
                 var mult = Mathf.Min(throwForce_, rigidbody.mass * 10);
                 force = hitDir * mult;
-                rigidbody.AddForce(force, ForceMode.Impulse);
+                rigidbody.velocity = force;
             }
             if (grabbableObjectRef.itemProperties.dropSFX != null)
             {
@@ -421,13 +465,30 @@ namespace Physics_Items.ItemPhysics
         static bool firstHit = false;
         static Vector3 velocity;
         static float velocityMag;
+
+        protected virtual void OnCollisionExit(Collision collision)
+        {
+            if (collision.gameObject.layer == 26 && collision.collider == GameNetworkManager.Instance.localPlayerController.playerCollider)
+            {
+                slow = false;
+                GameNetworkManager.Instance.localPlayerController.isMovementHindered = 0;
+            }
+        }
+
+
+        public bool slow;
         // This is so scuffed
         protected virtual void OnCollisionEnter(Collision collision)
         {
-            if (collision.gameObject.layer == 26 && Plugin.Instance.disablePlayerCollision.Value) // Not sure if layer 26 is player only. ehhghh
+            if (collision.gameObject.layer == 26 && Plugin.Instance.disablePlayerCollision.Value)
             {
                 Physics.IgnoreCollision(collider, collision.gameObject.GetComponent<Collider>(), true); // test
                 return;
+            }
+            // Calculate the force that the player character would experience
+            if (collision.gameObject.layer == 26 && collision.collider == GameNetworkManager.Instance.localPlayerController.playerCollider)
+            {
+                slow = true;
             }
             if (!firstHit) // So no jumpscare when items first load in xD
             {
@@ -485,11 +546,13 @@ namespace Physics_Items.ItemPhysics
         public Vector3 hitDir = Vector3.zero;
         public bool Hit(int force, Vector3 hitDirection, PlayerControllerB playerWhoHit = null, bool playHitSFX = false)
         {
+            hitDir = hitDirection;
+            isHit = true;
             if (IsHostOrServer)
             {
-                int id = gameObject.GetInstanceID();
-                FastBufferWriter writer = new FastBufferWriter(FastBufferWriter.GetWriteSize(id), Unity.Collections.Allocator.Temp);
-                writer.WriteValueSafe(id);
+                NetworkObjectReference networkRef = networkObject;
+                FastBufferWriter writer = new FastBufferWriter(FastBufferWriter.GetWriteSize(networkRef), Unity.Collections.Allocator.Temp);
+                writer.WriteValueSafe(networkRef);
                 foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
                 {
                     NetworkManager.Singleton.CustomMessagingManager.SendNamedMessage(OnCollision.CollisionCheck, client.ClientId, writer, NetworkDelivery.ReliableSequenced);
@@ -499,8 +562,6 @@ namespace Physics_Items.ItemPhysics
             {
                 PlayDropSFX();
             }
-            hitDir = hitDirection;
-            isHit = true;
             return true;
         }
     }

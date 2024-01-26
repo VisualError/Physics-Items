@@ -19,6 +19,7 @@ using System.IO;
 using System.Reflection;
 using AdvancedCompany.Config;
 using UnityEngine.Assertions.Must;
+using UnityEngine.Rendering.VirtualTexturing;
 
 namespace Physics_Items
 {
@@ -37,15 +38,16 @@ namespace Physics_Items
         internal bool ServerHasMod = false;
         internal HashSet<Type> manualSkipList = new HashSet<Type>();
         internal HashSet<Type> blockList = new HashSet<Type>();
-        string configDirectory = Path.Combine(Paths.PluginPath, "Config");
+        string configDirectory = Paths.ConfigPath;
         internal ConfigEntry<bool> useSourceSounds;
-        internal ConfigEntry<bool> overrideAllItemPhysics;
         internal ConfigEntry<bool> physicsOnPickup;
         internal ConfigEntry<bool> disablePlayerCollision;
-        internal ConfigEntry<bool> overrideAllModdedItemPhysics;
         internal ConfigEntry<float> maxCollisionVolume;
+        internal ConfigEntry<bool> overrideAllItemPhysics;
+        internal ConfigEntry<bool> InitializeConfigs;
+        internal ConfigEntry<bool> DebuggingStuff;
         internal ConfigFile customBlockList;
-        internal Dictionary<string, GrabbableObject> allItems = new Dictionary<string, GrabbableObject>();
+        internal Dictionary<string, GrabbableObject> allItemsDictionary = new Dictionary<string, GrabbableObject>();
         internal Assembly myAssembly;
         internal readonly Harmony Harmony = new(PluginInfo.PLUGIN_GUID);
 
@@ -57,25 +59,15 @@ namespace Physics_Items
             Logger = base.Logger; // So other files can access Plugin.Instance.Logger.
             // Plugin startup logic
             Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
+            
             AssetLoader.LoadAssetBundles();
-            #region "Configs"
-            customBlockList = new ConfigFile(Path.Combine(configDirectory, "physicsItems_CustomBlockList.cfg"), true);
-            useSourceSounds = Config.Bind("Fun", "Use Source Engine Collision Sounds", false, "Use source rigidbody sounds.");
-            overrideAllItemPhysics = Config.Bind("Fun", "Override all Item Physics", false, "ALL Items will have physics, regardless of issues.");
-            overrideAllModdedItemPhysics = Config.Bind("Fun", "Override all MODDED Item Physics", false, "ALL Modded Items will have physics, regardless of issues.");
-            physicsOnPickup = Config.Bind("Physics Behaviour", "Physics On Pickup", false, "Only enable item physisc when it has been picked up at least once.");
-            disablePlayerCollision = Config.Bind("Physics Behaviour", "Disable Player Collision", false, "Set if Physical Items can collide with players.");
-            maxCollisionVolume = Config.Bind("Physics Behaviour", "Max Collision Volume", 4f, "Sets the max volume each collision should have.");
-            #endregion
 
-            #region "Harmony Patches"
-            Harmony.PatchAll(typeof(ModCheck));
-            Harmony.PatchAll(typeof(OnCollision));
-            if(ThrowEverythingCompatibility.enabled)
+            #region "Compatibility"
+            if (ThrowEverythingCompatibility.enabled)
             {
                 ThrowEverythingCompatibility.ApplyFixes();
             }
-            if(AdvancedCompanyCompatibility.enabled)
+            if (AdvancedCompanyCompatibility.enabled)
             {
                 AdvancedCompanyCompatibility.ApplyFixes();
             }
@@ -91,10 +83,38 @@ namespace Physics_Items
             {
                 LethalConfigCompatibility.ApplyFixes();
             }
+            #endregion
+
+            #region "Harmony Patches"
+            Harmony.PatchAll(typeof(ModCheck));
+            Harmony.PatchAll(typeof(OnCollision));
             myAssembly = Assembly.GetExecutingAssembly();
             manualSkipList.Add(typeof(ExtensionLadderItem));
             manualSkipList.Add(typeof(RadarBoosterItem));
+            #endregion
+
+            #region "Configs"
+            InitializeConfigs = Config.Bind("Technical", "Initialize Configs", true, "Re-Initializes all configs when set to true");
+            customBlockList = new ConfigFile(Path.Combine(configDirectory, "physicsItems_CustomBlockList.cfg"), true);
+            useSourceSounds = Config.Bind("Fun", "Use Source Engine Collision Sounds", false, "Use source rigidbody sounds.");
+            overrideAllItemPhysics = Config.Bind("Fun", "Override all Item Physics", false, "ALL Items will have physics, regardless of blocklist.");
+            physicsOnPickup = Config.Bind("Physics Behaviour", "Physics On Pickup", false, "Only enable item physisc when it has been picked up at least once.");
+            disablePlayerCollision = Config.Bind("Physics Behaviour", "Disable Player Collision", false, "Set if Physical Items can collide with players.");
+            maxCollisionVolume = Config.Bind("Physics Behaviour", "Max Collision Volume", 4f, "Sets the max volume each collision should have.");
+            DebuggingStuff = Config.Bind("Technical", "Debug", false, "Debug mode");
             customBlockList.SettingChanged += CustomBlockList_SettingChanged;
+            if (InitializeConfigs.Value)
+            {
+                // Delete the existing config file
+                if (File.Exists(Config.ConfigFilePath))
+                {
+                    File.Delete(Config.ConfigFilePath);
+                }
+                // Create a new config file with default values
+                Config.Save();
+
+                Logger.Log(BepInEx.Logging.LogLevel.All, "Initializing Configs..");
+            }
             #endregion
 
             #region "MonoMod Hooks"
@@ -110,8 +130,9 @@ namespace Physics_Items
 
         private void CustomBlockList_SettingChanged(object sender, SettingChangedEventArgs e)
         {
-            Plugin.Logger.LogWarning($"Changed: {e.ChangedSetting.Definition.Section} to {e.ChangedSetting.GetSerializedValue()}");
-            var grabbable = allItems[e.ChangedSetting.Definition.Section];
+            if (overrideAllItemPhysics.Value) return;
+            Logger.LogWarning($"Changed: {e.ChangedSetting.Definition.Section} to {e.ChangedSetting.GetSerializedValue()}");
+            var grabbable = allItemsDictionary[e.ChangedSetting.Definition.Section];
             List<GrabbableObject> grabbableList = FindObjectsByType<GrabbableObject>(FindObjectsInactive.Exclude, FindObjectsSortMode.None).ToList();
             if (e.ChangedSetting.GetSerializedValue() == "true")
             {
@@ -151,21 +172,36 @@ namespace Physics_Items
                 }
             }
             Initialized = true;
+            InitializeConfigs.Value = false;
         }
 
         private void InitializeBlocklistConfig(GrabbableObject grabbableObject)
         {
             var value = false;
-            if (manualSkipList.Contains(grabbableObject.GetType())) value = true;
-            if(!allItems.ContainsKey(grabbableObject.itemProperties.itemName)) allItems.Add(grabbableObject.itemProperties.itemName, grabbableObject);
+            if (grabbableObject.itemProperties == null)
+            {
+                Logger.LogWarning("Skipping item with no item properties");
+                return;
+            }
+            if (grabbableObject.itemProperties.itemName.IsNullOrWhiteSpace())
+            {
+                Logger.LogWarning("Skipping item with no item name");
+                return;
+            }
+            if (manualSkipList.Contains(grabbableObject.GetType()) || grabbableObject.GetComponent<Rigidbody>() != null) value = true;
+            allItemsDictionary[grabbableObject.itemProperties.itemName] = grabbableObject;
             ConfigDefinition configDef = new ConfigDefinition(grabbableObject.itemProperties.itemName, "Add to blocklist");
             customBlockList.Bind(configDef, value, new ConfigDescription("If check/true, adds to blocklist. [REQUIRES RESTART]"));
+            if (InitializeConfigs.Value)
+            {
+                customBlockList[configDef].BoxedValue = value;
+            }
             if (customBlockList[configDef].GetSerializedValue() == "true")
             {
                 skipObject.Add(grabbableObject);
                 blockList.Add(grabbableObject.GetType());
             }
-            Logger.LogInfo($"Adding: {grabbableObject.itemProperties.itemName} to config");
+            Logger.LogInfo($"Added: {grabbableObject.itemProperties.itemName} to config (Default: {value}, current: {customBlockList[configDef].GetSerializedValue()})");
         }
 
         #region "MonoMod Patches"
@@ -190,6 +226,7 @@ namespace Physics_Items
         private void PlayerControllerB_PlaceGrabbableObject(On.GameNetcodeStuff.PlayerControllerB.orig_PlaceGrabbableObject orig, GameNetcodeStuff.PlayerControllerB self, Transform parentObject, Vector3 positionOffset, bool matchRotationOfParent, GrabbableObject placeObject)
         {
             orig(self, parentObject, positionOffset, matchRotationOfParent, placeObject);
+            Logger.LogWarning("placing object");
             if (skipObject.Contains(placeObject)) return;
             Utils.Physics.GetPhysicsComponent(placeObject.gameObject, out PhysicsComponent physics);
             if (physics == null) return;

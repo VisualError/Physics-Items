@@ -20,19 +20,12 @@ namespace Physics_Items.ItemPhysics
         }
 
         // TODO: Optimize code
-        private static PhysicsComponent AddPhysicsComponent(GrabbableObject grabbableObject)
+        internal static PhysicsComponent AddPhysicsComponent(GrabbableObject grabbableObject)
         {
             if (grabbableObject.gameObject.GetComponent<NetworkObject>() == null) return null;
-            if (grabbableObject.gameObject.GetComponent<Rigidbody>() != null || grabbableObject.gameObject.GetComponentInChildren<Rigidbody>() != null)
+            if (Plugin.Instance.blockList.Contains(grabbableObject.GetType()))
             {
-                Plugin.Logger.LogWarning($"Skipping Item with Rigidbody: {grabbableObject.gameObject}");
-                grabbableObject.gameObject.AddComponent<DestroyHelper>();
-                Plugin.Instance.skipObject.Add(grabbableObject);
-                return null;
-            }
-            else if (Plugin.Instance.blockList.Contains(grabbableObject.GetType()))
-            {
-                if (Plugin.Instance.overrideAllModdedItemPhysics.Value) return null;
+                if (Plugin.Instance.overrideAllItemPhysics.Value) return null;
                 Plugin.Logger.LogWarning($"Skipping Blocked Item: {grabbableObject.gameObject}");
                 grabbableObject.gameObject.AddComponent<DestroyHelper>();
                 Plugin.Instance.skipObject.Add(grabbableObject);
@@ -61,6 +54,7 @@ namespace Physics_Items.ItemPhysics
             if (Plugin.Instance.skipObject.Contains(self))
             {
                 orig(self, enable);
+                return;
             }
             if (Utils.Physics.GetPhysicsComponent(self.gameObject, out PhysicsComponent component))
             {
@@ -83,16 +77,16 @@ namespace Physics_Items.ItemPhysics
 
         private static void GrabbableObject_Start(On.GrabbableObject.orig_Start orig, GrabbableObject self)
         {
-            if (Utils.Physics.GetPhysicsComponent(self.gameObject) != null) return;
-            if (Plugin.Instance.physicsOnPickup.Value)
+            if (Utils.Physics.GetPhysicsComponent(self.gameObject) != null)
             {
-                Plugin.Instance.skipObject.Add(self);
+                orig(self);
+                return;
             }
             PhysicsComponent comp = AddPhysicsComponent(self);
-            if (comp != null)
+            if (Plugin.Instance.physicsOnPickup.Value && comp != null)
             {
                 comp.enabled = false;
-                comp.SetPosition();
+                Plugin.Instance.skipObject.Add(self);
             }
             orig(self);
         }
@@ -100,9 +94,9 @@ namespace Physics_Items.ItemPhysics
         private static void GrabbableObject_GrabItem(On.GrabbableObject.orig_GrabItem orig, GrabbableObject self)
         {
             orig(self);
-            Utils.Physics.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp);
-            if (comp == null) return;
+            if (!Utils.Physics.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp)) return;
             comp.alreadyPickedUp = true;
+            comp.slow = false;
         }
 
         private static void GrabbableObject_ItemActivate(On.GrabbableObject.orig_ItemActivate orig, GrabbableObject self, bool used, bool buttonDown)

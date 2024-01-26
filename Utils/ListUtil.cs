@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using UnityEngine;
 
 namespace Physics_Items.Utils
 {
@@ -18,6 +19,18 @@ namespace Physics_Items.Utils
         {
             int num = 0;
             return GetRandomElement<T>(objects, ref num);
+        }
+
+        public static string[] GetLayersFromMask(int layerMask)
+        {
+            var layers = new List<string>();
+            for (int i = 0; i < 32; ++i)
+            {
+                int shifted = 1 << i;
+                if ((layerMask & shifted) == shifted)
+                    layers.Add(LayerMask.LayerToName(i));
+            }
+            return layers.ToArray();
         }
     }
 }
