@@ -3,10 +3,14 @@ using MoreShipUpgrades.Patches;
 using Physics_Items.ModCompatFixes;
 using Physics_Items.NamedMessages;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
+using UnityEngine.Audio;
 using static UnityEngine.ParticleSystem.PlaybackState;
 using Collision = UnityEngine.Collision;
 
@@ -30,6 +34,7 @@ namespace Physics_Items.ItemPhysics
         public float oldVolume;
         public bool alreadyPickedUp = false;
         public Vector3 up;
+        public float defaultPitch;
 
         public AudioSource audioSource;
 
@@ -69,17 +74,34 @@ namespace Physics_Items.ItemPhysics
             {
                 apparatusRef = lungProp;
             }
-            audioSource = gameObject.GetComponent<AudioSource>();
+            audioSource = Utils.Physics.CopyComponent(gameObject.GetComponent<AudioSource>(), gameObject);
             physicsHelperRef = gameObject.AddComponent<PhysicsHelper>();
             collider = gameObject.GetComponent<Collider>();
             oldVolume = audioSource.volume;
+            defaultPitch = audioSource.pitch;
             up = grabbableObjectRef.itemProperties.verticalOffset * Vector3.up;
             grabbableObjectRef.itemProperties.syncDiscardFunction = true; // testing.
+            grabbableObjectRef.itemProperties.syncGrabFunction = true; // testing.
             if (LethalThingsCompatibility.enabled)
             {
                 LethalThingsCompatibility.ApplyFixes(this);
             }
+            //StartCoroutine(FixAudio());
         }
+
+        private IEnumerator FixAudio()
+        {
+            yield return new WaitUntil(() => SoundManager.Instance != null && SoundManager.Instance.diageticMixer != null);
+            AudioMixerGroup group = SoundManager.Instance.diageticMixer.FindMatchingGroups("Diagetic").FirstOrDefault();
+            if(group == null)
+            {
+                Plugin.Logger.LogWarning("sad");
+                yield break;
+            }
+            audioSource.outputAudioMixerGroup = group;
+            Plugin.Logger.LogWarning("fixed audio");
+        }
+
         public int gridSize = 5;
         public float cellSize = 2f;
         public Collider[] results = new Collider[3];
@@ -106,7 +128,7 @@ namespace Physics_Items.ItemPhysics
 
                     // Add the item's position to the cell center
                     cellCenter += transform.position;
-                    Material material = null;
+                    Material? material = null;
                     if (Plugin.Instance.DebuggingStuff.Value)
                     {
                         primitives[cellCenter] = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -162,6 +184,7 @@ namespace Physics_Items.ItemPhysics
         }
         public void SetPosition()
         {
+            Plugin.Logger.LogWarning("called");
             Transform parent = GetParent();
             if (parent != transform)
             {
@@ -180,7 +203,6 @@ namespace Physics_Items.ItemPhysics
                 transform.rotation = Quaternion.Euler(grabbableObjectRef.itemProperties.restingRotation.x, grabbableObjectRef.floorYRot + grabbableObjectRef.itemProperties.floorYOffset + 90f, grabbableObjectRef.itemProperties.restingRotation.z);
             }
         }
-
         void InitializeVariables()
         {
 
@@ -217,6 +239,15 @@ namespace Physics_Items.ItemPhysics
             rigidbody.velocity = Vector3.zero;
             FixPosition();
             rigidbody.velocity = Vector3.zero;
+
+            addedWeight = false;
+            isPushed = false;
+            collisions[this] = grabbableObjectRef.itemProperties.weight;
+        }
+
+        public void RemoveCollision(PhysicsComponent comp)
+        {
+            if (collisions.ContainsKey(comp)) collisions.Remove(comp);
         }
 
         void UninitializeVariables()
@@ -230,12 +261,13 @@ namespace Physics_Items.ItemPhysics
 
             grabbableObjectRef.fallTime = 0f;
             grabbableObjectRef.reachedFloorTarget = false;
-            audioSource.volume = oldVolume;
             //transform.rotation = Quaternion.Euler(grabbableObjectRef.itemProperties.restingRotation.x, grabbableObjectRef.floorYRot + grabbableObjectRef.itemProperties.floorYOffset + 90f, grabbableObjectRef.itemProperties.restingRotation.z);
             networkTransform.enabled = false;
             firstHit = false;
             hitDir = Vector3.zero;
             oldValue = false;
+            addedWeight = false;
+            isPushed = false;
         }
 
         void OnEnable()
@@ -279,13 +311,15 @@ namespace Physics_Items.ItemPhysics
             }
             return true;
         }
-
+        public float calculatedMass;
+        public float clampedMass;
         void Start()
         {
             if (!HasRequiredComponents()) return;
             rigidbody.useGravity = false;
-            float calculatedMass = ((grabbableObjectRef.itemProperties.weight * 105f) - 105f); // zeekers why do you calculate mass this way.
-            rigidbody.mass = Mathf.Max(calculatedMass, 1)/ 2.205f;
+            calculatedMass = ((grabbableObjectRef.itemProperties.weight - 1) * 105f); // zeekers why do you calculate mass this way.
+            clampedMass = Mathf.Clamp(grabbableObjectRef.itemProperties.weight - 1f, 0f, 10f);
+            rigidbody.mass = Mathf.Max(calculatedMass, 1) / 2.205f;
             throwForce = rigidbody.mass * 10f;
             terminalVelocity = MathF.Sqrt(2 * rigidbody.mass * gravity);
             grabbableObjectRef.itemProperties.itemSpawnsOnGround = false;
@@ -346,23 +380,12 @@ namespace Physics_Items.ItemPhysics
 
         bool oldValue = false;
         private Transform parent;
-        private Vector3? relativePosition;
-        private Vector3 oldPos;
-        private Vector3 oldRelativePosition;
-        private float magnitude;
-        private void MoveWithParent()
-        {
-
-        }
 
         // TODO: Stop doing dumb shit.
         // TODO: Learn how to use rigidbodies efficiently.
+        public bool addedWeight = false;
         protected virtual void Update()
         {
-            if(isPushed)
-            {
-                GameNetworkManager.Instance.localPlayerController.isMovementHindered = (int)(rigidbody.mass / 1f) - 1;
-            }
             if (oldValue != Plugin.Instance.ServerHasMod)
             {
                 oldValue = Plugin.Instance.ServerHasMod;
@@ -383,27 +406,15 @@ namespace Physics_Items.ItemPhysics
             {
                 if (rigidbody.isKinematic && !isPlaced)
                 {
+                    /*if (addedWeight)
+                    {
+                        player.carryWeight -= clampedMass;
+                    }*/
                     alreadyPickedUp = false;
                     SetPosition();
                     enabled = false;
                 }
             }
-        }
-
-        public static float FastInverseSqrt(float number)
-        {
-            int i;
-            float x2, y;
-            const float threehalfs = 1.5F;
-
-            x2 = number * 0.5F;
-            y = number;
-            i = BitConverter.ToInt32(BitConverter.GetBytes(y), 0);
-            i = 0x5f3759df - (i >> 1);
-            y = BitConverter.ToSingle(BitConverter.GetBytes(i), 0);
-            y = y * (threehalfs - (x2 * y * y));
-
-            return 1 / y;
         }
 
         public Transform GetParent()
@@ -423,6 +434,10 @@ namespace Physics_Items.ItemPhysics
             return parent;
         }
 
+        public Dictionary<PhysicsComponent, float> collisions = new Dictionary<PhysicsComponent, float>();
+
+        
+
         public void PlayDropSFX()
         {
             var force = Vector3.zero;
@@ -437,24 +452,25 @@ namespace Physics_Items.ItemPhysics
             {
                 AudioClip clip = grabbableObjectRef.itemProperties.dropSFX;
                 if (Plugin.Instance.useSourceSounds.Value) clip = Utils.ListUtil.GetRandomElement(Utils.AssetLoader.allAudioList);
+                float? vol = null;
                 if (audioSource != null) 
                 {
-                    float vol;
                     if (force != Vector3.zero)
                     {
                         vol = Mathf.Min(force.magnitude, Plugin.Instance.maxCollisionVolume.Value);
                     }
                     else
                     {
-                        vol = Mathf.Clamp(velocityMag, 0.2f, Plugin.Instance.maxCollisionVolume.Value); //Mathf.Min(velocityMag, oldVolume); //oldVolume;
+                        vol = Mathf.Clamp(velocityMag, 0.6f, Plugin.Instance.maxCollisionVolume.Value); //Mathf.Min(velocityMag, oldVolume); //oldVolume;
                     }
-                    audioSource.volume = vol; //Mathf.Clamp(velocityMag, 0f, audioSource.maxDistance);
+                    audioSource.volume = vol.Value; //Mathf.Clamp(velocityMag, 0f, audioSource.maxDistance);
+                    audioSource.pitch = Utils.Physics.mapValue(rigidbody.velocity.magnitude, .9f, 10f, .9f, defaultPitch+0.5f);
                     audioSource.PlayOneShot(clip, audioSource.volume);
-                    //Plugin.Logger.LogWarning($"Playing with volome: {audioSource.volume}, {audioSource.minDistance} {audioSource.maxDistance}");
+                    //Plugin.Logger.LogWarning($"Playing with volome {audioSource.pitch}: {audioSource.volume}, {audioSource.minDistance} {audioSource.maxDistance}");
                 }
                 if (grabbableObjectRef.IsOwner)
                 {
-                    RoundManager.Instance.PlayAudibleNoise(gameObject.transform.position, 8f, 0.5f, 0, grabbableObjectRef.isInElevator && StartOfRound.Instance.hangarDoorsClosed, 941);
+                    RoundManager.Instance.PlayAudibleNoise(gameObject.transform.position, vol.HasValue ? vol.Value * 8f : 8f, 0.5f, 0, grabbableObjectRef.isInElevator && StartOfRound.Instance.hangarDoorsClosed, 941);
                 }
             }
             grabbableObjectRef.hasHitGround = true;
@@ -464,17 +480,98 @@ namespace Physics_Items.ItemPhysics
         static Vector3 velocity;
         static float velocityMag;
 
-        protected virtual void OnCollisionExit(Collision collision)
+
+        public void RemoveCollisions(Collision collision, PhysicsComponent comp)
         {
-            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == GameNetworkManager.Instance.localPlayerController)
+            foreach (ContactPoint contact in collision.contacts)
             {
-                isPushed = false;
-                GameNetworkManager.Instance.localPlayerController.isMovementHindered = 0;
+                GameObject target = contact.otherCollider.gameObject;
+                if (target.CompareTag("PhysicsProp"))
+                {
+                    if (Utils.Physics.GetPhysicsComponent(target, out PhysicsComponent collisionPhysComp))
+                    {
+                        collisions.Remove(collisionPhysComp);
+                    }
+                }
+            }
+            collisions.Remove(comp);
+            if (!collisions.ContainsKey(this))
+            {
+                collisions[this] = grabbableObjectRef.itemProperties.weight;
             }
         }
 
+        protected virtual void OnCollisionExit(Collision collision)
+        {
+            /*if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player && isPushed)
+            {
+                isPushed = false;
+                if (addedWeight)
+                {
+                    addedWeight = false;
+                    player.carryWeight -= clampedMass;
+                    Plugin.Logger.LogWarning(player.carryWeight);
+                }
+            }*/
+            if (collision.gameObject.CompareTag("PhysicsProp"))
+            {
+                if(Utils.Physics.GetPhysicsComponent(collision.gameObject, out PhysicsComponent comp))
+                {
+                    if (collisions.ContainsKey(comp))
+                    {
+                        RemoveCollisions(collision, comp);
+                    }
+                }
+            }
+            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player && isPushed)
+            {
+                isPushed = false;
+                addedWeight = false;
+                previousPlayerWeight = 0f;
+            }
+        }
 
-        public bool isPushed;
+        float sum = 0f;
+        float previousPlayerWeight = 0f;
+        StringBuilder builder = new StringBuilder();
+
+        PlayerControllerB player => GameNetworkManager.Instance.localPlayerController;
+        void OnCollisionStay(Collision collision)
+        {
+            foreach (ContactPoint contact in collision.contacts) // I actually big brained on this foreach holy fuck.
+            {
+                GameObject target = contact.otherCollider.gameObject;
+                if (target.CompareTag("PhysicsProp"))
+                {
+                    if (Utils.Physics.GetPhysicsComponent(target, out PhysicsComponent collisionPhysComp))
+                    {
+                        if (collisionPhysComp.grabbableObjectRef.isHeld) continue;
+                        if (!collisionPhysComp.collisions.ContainsKey(collisionPhysComp)) collisionPhysComp.collisions[collisionPhysComp] = grabbableObjectRef.itemProperties.weight;
+                        collisions = collisionPhysComp.collisions;
+                    }
+                }
+            }
+            if (!(collisions.Count <= 1))
+            {
+                builder.Clear();
+                foreach (var col in collisions)
+                {
+                    builder.Append($"\nOLD{gameObject.name}: {col.Key}: {col.Value}");
+                }
+                Plugin.Logger.LogWarning(builder.ToString());
+            }
+            sum = collisions.Sum(x => x.Value);
+            if (collisions.Count <= 1) return;
+            builder.Clear();
+            foreach (var col in collisions)
+            {
+                builder.Append($"\nNEW {gameObject.name}: {col.Key}: {col.Value}");
+            }
+            Plugin.Logger.LogWarning(builder.ToString());
+        }
+
+
+        public bool isPushed = false;
 
         Dictionary<GameObject, PlayerControllerB> Players = new Dictionary<GameObject, PlayerControllerB>();
         private PlayerControllerB GetPlayer(GameObject obj)
@@ -484,6 +581,10 @@ namespace Physics_Items.ItemPhysics
                 return Players[obj];
             }
             Players[obj] = obj.GetComponent<PlayerControllerB>();
+            if (Players[obj] == null)
+            {
+                Players[obj] = obj.GetComponentInParent<PlayerControllerB>();
+            }
             return Players[obj];
         }
 
@@ -492,11 +593,12 @@ namespace Physics_Items.ItemPhysics
         {
             if (collision.gameObject.layer == 26 && Plugin.Instance.disablePlayerCollision.Value)
             {
-                Physics.IgnoreCollision(collider, collision.gameObject.GetComponent<Collider>(), true); // test
+                Physics.IgnoreCollision(collider, collision.gameObject.GetComponent<Collider>(), true);
+                isPushed = false;
                 return;
             }
             // Calculate the force that the player character would experience
-            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == GameNetworkManager.Instance.localPlayerController)
+            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player)
             {
                 isPushed = true;
             }
@@ -520,7 +622,7 @@ namespace Physics_Items.ItemPhysics
                 PlayDropSFX();
             }
             velocity = rigidbody.velocity;
-            velocityMag = FastInverseSqrt(velocity.sqrMagnitude);
+            velocityMag = Utils.Physics.FastInverseSqrt(velocity.sqrMagnitude);
         }
 
         void OnDestroy()
@@ -551,12 +653,20 @@ namespace Physics_Items.ItemPhysics
             {
                 grabbableObjectRef.radarIcon.position = transform.position;
             }
-            if (oldPosition.HasValue)
+            if (oldPosition.HasValue && grabbableObjectRef.isHeld)
             {
-                Plugin.Logger.LogWarning($"{(oldPosition.Value - transform.position).magnitude} {(oldPosition.Value - transform.position).normalized}");
+                heldVelocityMagnitudeSqr = (oldPosition.Value - transform.position).sqrMagnitude;
+                heldVelocityNormalized = (transform.position-oldPosition.Value).normalized;
+            }
+            else
+            {
+                heldVelocityMagnitudeSqr = 0;
+                heldVelocityNormalized = Vector3.zero;
             }
             oldPosition = transform.position;
         }
+        public float heldVelocityMagnitudeSqr;
+        public Vector3 heldVelocityNormalized;
 
         public bool isHit = false;
         public Vector3 hitDir = Vector3.zero;

@@ -23,7 +23,7 @@ namespace Physics_Items.ItemPhysics.Environment
             for (int i = 0; i < list.Count; i++)
             {
                 Vector3 local = ((explosionPosition + Vector3.up) - list[i].transform.position);
-                float magnitude = PhysicsComponent.FastInverseSqrt(local.sqrMagnitude);
+                float magnitude = Utils.Physics.FastInverseSqrt(local.sqrMagnitude);
                 Vector3 normal = (local).normalized;
                 if (Utils.Physics.GetPhysicsComponent(list[i].gameObject, out PhysicsComponent physics))
                 {
