@@ -73,7 +73,6 @@ namespace Physics_Items.ItemPhysics
             physicsHelperRef = gameObject.AddComponent<PhysicsHelper>();
             collider = gameObject.GetComponent<Collider>();
             oldVolume = audioSource.volume;
-            throwForce = rigidbody.mass * 10f;
             up = grabbableObjectRef.itemProperties.verticalOffset * Vector3.up;
             grabbableObjectRef.itemProperties.syncDiscardFunction = true; // testing.
             if (LethalThingsCompatibility.enabled)
@@ -286,7 +285,8 @@ namespace Physics_Items.ItemPhysics
             if (!HasRequiredComponents()) return;
             rigidbody.useGravity = false;
             float calculatedMass = ((grabbableObjectRef.itemProperties.weight * 105f) - 105f); // zeekers why do you calculate mass this way.
-            rigidbody.mass = Mathf.Max(calculatedMass, 1);
+            rigidbody.mass = Mathf.Max(calculatedMass, 1)/ 2.205f;
+            throwForce = rigidbody.mass * 10f;
             terminalVelocity = MathF.Sqrt(2 * rigidbody.mass * gravity);
             grabbableObjectRef.itemProperties.itemSpawnsOnGround = false;
 
@@ -359,7 +359,7 @@ namespace Physics_Items.ItemPhysics
         // TODO: Learn how to use rigidbodies efficiently.
         protected virtual void Update()
         {
-            if(slow)
+            if(isPushed)
             {
                 GameNetworkManager.Instance.localPlayerController.isMovementHindered = (int)(rigidbody.mass / 1f) - 1;
             }
@@ -429,9 +429,8 @@ namespace Physics_Items.ItemPhysics
             if (isHit)
             {
                 isHit = false;
-                var throwForce_ = Mathf.Min(throwForce, 36f);
-                var mult = Mathf.Min(throwForce_, rigidbody.mass * 10);
-                force = hitDir * mult;
+                var throwForce_ = (5.43f/rigidbody.mass);
+                force = hitDir * throwForce_;
                 rigidbody.velocity = force;
             }
             if (grabbableObjectRef.itemProperties.dropSFX != null)
@@ -444,7 +443,6 @@ namespace Physics_Items.ItemPhysics
                     if (force != Vector3.zero)
                     {
                         vol = Mathf.Min(force.magnitude, Plugin.Instance.maxCollisionVolume.Value);
-                        Plugin.Logger.LogWarning("wat");
                     }
                     else
                     {
@@ -468,15 +466,27 @@ namespace Physics_Items.ItemPhysics
 
         protected virtual void OnCollisionExit(Collision collision)
         {
-            if (collision.gameObject.layer == 26)
+            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == GameNetworkManager.Instance.localPlayerController)
             {
-                slow = false;
+                isPushed = false;
                 GameNetworkManager.Instance.localPlayerController.isMovementHindered = 0;
             }
         }
 
 
-        public bool slow;
+        public bool isPushed;
+
+        Dictionary<GameObject, PlayerControllerB> Players = new Dictionary<GameObject, PlayerControllerB>();
+        private PlayerControllerB GetPlayer(GameObject obj)
+        {
+            if (Players.ContainsKey(obj))
+            {
+                return Players[obj];
+            }
+            Players[obj] = obj.GetComponent<PlayerControllerB>();
+            return Players[obj];
+        }
+
         // This is so scuffed
         protected virtual void OnCollisionEnter(Collision collision)
         {
@@ -486,9 +496,9 @@ namespace Physics_Items.ItemPhysics
                 return;
             }
             // Calculate the force that the player character would experience
-            if (collision.gameObject.layer == 26)
+            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == GameNetworkManager.Instance.localPlayerController)
             {
-                slow = true;
+                isPushed = true;
             }
             if (!firstHit) // So no jumpscare when items first load in xD
             {
@@ -518,6 +528,7 @@ namespace Physics_Items.ItemPhysics
             Utils.Physics.RemovePhysicsComponent(gameObject);
         }
 
+        Vector3? oldPosition;
         protected virtual void LateUpdate()
         {
             if (grabbableObjectRef == null)
@@ -540,6 +551,11 @@ namespace Physics_Items.ItemPhysics
             {
                 grabbableObjectRef.radarIcon.position = transform.position;
             }
+            if (oldPosition.HasValue)
+            {
+                Plugin.Logger.LogWarning($"{(oldPosition.Value - transform.position).magnitude} {(oldPosition.Value - transform.position).normalized}");
+            }
+            oldPosition = transform.position;
         }
 
         public bool isHit = false;

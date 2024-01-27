@@ -97,10 +97,10 @@ namespace Physics_Items.ItemPhysics
             orig(self);
             if (!Utils.Physics.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp)) return;
             comp.alreadyPickedUp = true;
-            if (comp.slow)
+            if (comp.isPushed)
             {
                 GameNetworkManager.Instance.localPlayerController.isMovementHindered = 0;
-                comp.slow = false;
+                comp.isPushed = false;
             }
         }
 
