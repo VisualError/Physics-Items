@@ -6,7 +6,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
@@ -44,19 +43,19 @@ namespace Physics_Items.ItemPhysics
             string a = IsHostOrServer ? "Host" : "Client";
             Plugin.Logger.LogWarning($"Awake called by: {a}");
             grabbableObjectRef = gameObject.GetComponent<GrabbableObject>();
-            if(grabbableObjectRef == null)
+            if (grabbableObjectRef == null)
             {
                 Plugin.Logger.LogError($"GrabbableObject component does not exist for Game Object {gameObject}. This is not allowed!");
                 return;
             }
-            if(!TryGetComponent(out rigidbody))
+            if (!TryGetComponent(out rigidbody))
             {
                 rigidbody = gameObject.AddComponent<Rigidbody>();
                 rigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
             }
             networkObject = GetComponent<NetworkObject>();
             ScanNodeProperties scanNodeProperties = GetComponentInChildren<ScanNodeProperties>();
-            if(scanNodeProperties != null && !scanNodeProperties.gameObject.TryGetComponent(out scanNodeRigid))
+            if (scanNodeProperties != null && !scanNodeProperties.gameObject.TryGetComponent(out scanNodeRigid))
             {
                 scanNodeRigid = scanNodeProperties.gameObject.AddComponent<Rigidbody>();
                 Plugin.Logger.LogInfo($"Added Rigidbody to {gameObject} ScanNode");
@@ -66,7 +65,7 @@ namespace Physics_Items.ItemPhysics
                 networkTransform = gameObject.AddComponent<NetworkTransform>();
                 Plugin.Logger.LogWarning($"Successfully added NetworkTransform to {gameObject}");
             }
-            if(!TryGetComponent(out networkRigidbody) && networkObject != null)
+            if (!TryGetComponent(out networkRigidbody) && networkObject != null)
             {
                 networkRigidbody = gameObject.AddComponent<NetworkRigidbody>();
             }
@@ -81,7 +80,6 @@ namespace Physics_Items.ItemPhysics
             defaultPitch = audioSource.pitch;
             up = grabbableObjectRef.itemProperties.verticalOffset * Vector3.up;
             grabbableObjectRef.itemProperties.syncDiscardFunction = true; // testing.
-            grabbableObjectRef.itemProperties.syncGrabFunction = true; // testing.
             if (LethalThingsCompatibility.enabled)
             {
                 LethalThingsCompatibility.ApplyFixes(this);
@@ -93,7 +91,7 @@ namespace Physics_Items.ItemPhysics
         {
             yield return new WaitUntil(() => SoundManager.Instance != null && SoundManager.Instance.diageticMixer != null);
             AudioMixerGroup group = SoundManager.Instance.diageticMixer.FindMatchingGroups("Diagetic").FirstOrDefault();
-            if(group == null)
+            if (group == null)
             {
                 Plugin.Logger.LogWarning("sad");
                 yield break;
@@ -118,7 +116,7 @@ namespace Physics_Items.ItemPhysics
                 for (int y = 0; y < gridSize; y++)
                 {
                     // Calculate the center of the cell
-                    Vector3 cellCenter = new Vector3((x - gridSize / 2) * cellSize /2, 0, (y - gridSize / 2) * cellSize/2) + new Vector3(cellSize, 0, cellSize) * 0.5f;
+                    Vector3 cellCenter = new Vector3((x - gridSize / 2) * cellSize / 2, 0, (y - gridSize / 2) * cellSize / 2) + new Vector3(cellSize, 0, cellSize) * 0.5f;
                     if (cellCenter == new Vector3(cellSize, 0, cellSize) * 0.5f)
                     {
                         cellCenter = Vector3.zero;
@@ -146,7 +144,7 @@ namespace Physics_Items.ItemPhysics
                     if (overlap <= 1 || overlap <= 0)
                     {
                         if (Plugin.Instance.DebuggingStuff.Value) Plugin.Logger.LogWarning($"Found free spot at: {cellCenter}");
-                        if(material != null) material.color = Color.yellow;
+                        if (material != null) material.color = Color.yellow;
                         float distance = Vector3.Distance(cellCenter, transform.position);
                         if (distance < minDistance)
                         {
@@ -242,12 +240,6 @@ namespace Physics_Items.ItemPhysics
 
             addedWeight = false;
             isPushed = false;
-            collisions[this] = grabbableObjectRef.itemProperties.weight;
-        }
-
-        public void RemoveCollision(PhysicsComponent comp)
-        {
-            if (collisions.ContainsKey(comp)) collisions.Remove(comp);
         }
 
         void UninitializeVariables()
@@ -386,6 +378,11 @@ namespace Physics_Items.ItemPhysics
         public bool addedWeight = false;
         protected virtual void Update()
         {
+            if (isPushed && !addedWeight)
+            {
+                addedWeight = true;
+                GameNetworkManager.Instance.localPlayerController.carryWeight += clampedMass;
+            }
             if (oldValue != Plugin.Instance.ServerHasMod)
             {
                 oldValue = Plugin.Instance.ServerHasMod;
@@ -406,10 +403,10 @@ namespace Physics_Items.ItemPhysics
             {
                 if (rigidbody.isKinematic && !isPlaced)
                 {
-                    /*if (addedWeight)
+                    if (addedWeight)
                     {
-                        player.carryWeight -= clampedMass;
-                    }*/
+                        GameNetworkManager.Instance.localPlayerController.carryWeight -= clampedMass;
+                    }
                     alreadyPickedUp = false;
                     SetPosition();
                     enabled = false;
@@ -434,17 +431,13 @@ namespace Physics_Items.ItemPhysics
             return parent;
         }
 
-        public Dictionary<PhysicsComponent, float> collisions = new Dictionary<PhysicsComponent, float>();
-
-        
-
         public void PlayDropSFX()
         {
             var force = Vector3.zero;
             if (isHit)
             {
                 isHit = false;
-                var throwForce_ = (5.43f/rigidbody.mass);
+                var throwForce_ = (5.43f / rigidbody.mass);
                 force = hitDir * throwForce_;
                 rigidbody.velocity = force;
             }
@@ -453,7 +446,7 @@ namespace Physics_Items.ItemPhysics
                 AudioClip clip = grabbableObjectRef.itemProperties.dropSFX;
                 if (Plugin.Instance.useSourceSounds.Value) clip = Utils.ListUtil.GetRandomElement(Utils.AssetLoader.allAudioList);
                 float? vol = null;
-                if (audioSource != null) 
+                if (audioSource != null)
                 {
                     if (force != Vector3.zero)
                     {
@@ -464,7 +457,7 @@ namespace Physics_Items.ItemPhysics
                         vol = Mathf.Clamp(velocityMag, 0.6f, Plugin.Instance.maxCollisionVolume.Value); //Mathf.Min(velocityMag, oldVolume); //oldVolume;
                     }
                     audioSource.volume = vol.Value; //Mathf.Clamp(velocityMag, 0f, audioSource.maxDistance);
-                    audioSource.pitch = Utils.Physics.mapValue(rigidbody.velocity.magnitude, .9f, 10f, .9f, defaultPitch+0.5f);
+                    audioSource.pitch = Utils.Physics.mapValue(rigidbody.velocity.magnitude, .9f, 10f, .9f, defaultPitch + 0.5f);
                     audioSource.PlayOneShot(clip, audioSource.volume);
                     //Plugin.Logger.LogWarning($"Playing with volome {audioSource.pitch}: {audioSource.volume}, {audioSource.minDistance} {audioSource.maxDistance}");
                 }
@@ -480,94 +473,18 @@ namespace Physics_Items.ItemPhysics
         static Vector3 velocity;
         static float velocityMag;
 
-
-        public void RemoveCollisions(Collision collision, PhysicsComponent comp)
-        {
-            foreach (ContactPoint contact in collision.contacts)
-            {
-                GameObject target = contact.otherCollider.gameObject;
-                if (target.CompareTag("PhysicsProp"))
-                {
-                    if (Utils.Physics.GetPhysicsComponent(target, out PhysicsComponent collisionPhysComp))
-                    {
-                        collisions.Remove(collisionPhysComp);
-                    }
-                }
-            }
-            collisions.Remove(comp);
-            if (!collisions.ContainsKey(this))
-            {
-                collisions[this] = grabbableObjectRef.itemProperties.weight;
-            }
-        }
-
         protected virtual void OnCollisionExit(Collision collision)
         {
-            /*if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player && isPushed)
+            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == GameNetworkManager.Instance.localPlayerController && isPushed)
             {
                 isPushed = false;
                 if (addedWeight)
                 {
                     addedWeight = false;
-                    player.carryWeight -= clampedMass;
-                    Plugin.Logger.LogWarning(player.carryWeight);
-                }
-            }*/
-            if (collision.gameObject.CompareTag("PhysicsProp"))
-            {
-                if(Utils.Physics.GetPhysicsComponent(collision.gameObject, out PhysicsComponent comp))
-                {
-                    if (collisions.ContainsKey(comp))
-                    {
-                        RemoveCollisions(collision, comp);
-                    }
+                    GameNetworkManager.Instance.localPlayerController.carryWeight -= clampedMass;
+                    //Plugin.Logger.LogWarning(GameNetworkManager.Instance.localPlayerController.carryWeight);
                 }
             }
-            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player && isPushed)
-            {
-                isPushed = false;
-                addedWeight = false;
-                previousPlayerWeight = 0f;
-            }
-        }
-
-        float sum = 0f;
-        float previousPlayerWeight = 0f;
-        StringBuilder builder = new StringBuilder();
-
-        PlayerControllerB player => GameNetworkManager.Instance.localPlayerController;
-        void OnCollisionStay(Collision collision)
-        {
-            foreach (ContactPoint contact in collision.contacts) // I actually big brained on this foreach holy fuck.
-            {
-                GameObject target = contact.otherCollider.gameObject;
-                if (target.CompareTag("PhysicsProp"))
-                {
-                    if (Utils.Physics.GetPhysicsComponent(target, out PhysicsComponent collisionPhysComp))
-                    {
-                        if (collisionPhysComp.grabbableObjectRef.isHeld) continue;
-                        if (!collisionPhysComp.collisions.ContainsKey(collisionPhysComp)) collisionPhysComp.collisions[collisionPhysComp] = grabbableObjectRef.itemProperties.weight;
-                        collisions = collisionPhysComp.collisions;
-                    }
-                }
-            }
-            if (!(collisions.Count <= 1))
-            {
-                builder.Clear();
-                foreach (var col in collisions)
-                {
-                    builder.Append($"\nOLD{gameObject.name}: {col.Key}: {col.Value}");
-                }
-                Plugin.Logger.LogWarning(builder.ToString());
-            }
-            sum = collisions.Sum(x => x.Value);
-            if (collisions.Count <= 1) return;
-            builder.Clear();
-            foreach (var col in collisions)
-            {
-                builder.Append($"\nNEW {gameObject.name}: {col.Key}: {col.Value}");
-            }
-            Plugin.Logger.LogWarning(builder.ToString());
         }
 
 
@@ -598,7 +515,7 @@ namespace Physics_Items.ItemPhysics
                 return;
             }
             // Calculate the force that the player character would experience
-            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player)
+            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == GameNetworkManager.Instance.localPlayerController)
             {
                 isPushed = true;
             }
@@ -617,7 +534,7 @@ namespace Physics_Items.ItemPhysics
                     NetworkManager.Singleton.CustomMessagingManager.SendNamedMessage(OnCollision.CollisionCheck, client.ClientId, writer, NetworkDelivery.ReliableSequenced);
                 }
             }
-            else if(!Plugin.Instance.ServerHasMod)
+            else if (!Plugin.Instance.ServerHasMod)
             {
                 PlayDropSFX();
             }
@@ -656,7 +573,7 @@ namespace Physics_Items.ItemPhysics
             if (oldPosition.HasValue && grabbableObjectRef.isHeld)
             {
                 heldVelocityMagnitudeSqr = (oldPosition.Value - transform.position).sqrMagnitude;
-                heldVelocityNormalized = (transform.position-oldPosition.Value).normalized;
+                heldVelocityNormalized = (transform.position - oldPosition.Value).normalized;
             }
             else
             {

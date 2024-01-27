@@ -4,7 +4,6 @@ using System.Linq;
 using System.Text;
 using Unity.Netcode;
 using UnityEngine;
-using static UnityEngine.ParticleSystem.PlaybackState;
 
 namespace Physics_Items.ItemPhysics
 {
@@ -98,14 +97,15 @@ namespace Physics_Items.ItemPhysics
             orig(self);
             if (!Utils.Physics.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp)) return;
             comp.alreadyPickedUp = true;
-            var keysToRemove = new List<PhysicsComponent>(comp.collisions.Keys);
-
-            foreach (var key in keysToRemove)
+            if (comp.isPushed)
             {
-                key.RemoveCollision(comp);
+                comp.isPushed = false;
+                if (comp.addedWeight)
+                {
+                    GameNetworkManager.Instance.localPlayerController.carryWeight -= comp.clampedMass;
+                    comp.addedWeight = false;
+                }
             }
-            comp.collisions.Clear();
-            comp.collisions[comp] = self.itemProperties.weight;
         }
 
         private static void GrabbableObject_ItemActivate(On.GrabbableObject.orig_ItemActivate orig, GrabbableObject self, bool used, bool buttonDown)
