@@ -4,7 +4,6 @@ using System.Linq;
 using System.Text;
 using Unity.Netcode;
 using UnityEngine;
-using static UnityEngine.ParticleSystem.PlaybackState;
 
 namespace Physics_Items.ItemPhysics
 {
