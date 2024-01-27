@@ -15,7 +15,7 @@ I need a better icon. (This mod also works with [ThrowEverything Mod](https://th
 ## Installation
 
 1. Ensure you have [BepInEx](https://thunderstore.io/c/lethal-company/p/BepInEx/BepInExPack/) installed.
-2. Download the latest release of the Lethal Parrying mod from [Thunderstore](https://thunderstore.io/c/lethal-company/p/Ryokune/Physics_Items).
+2. Download the latest release of the Physics Items mod from [Thunderstore](https://thunderstore.io/c/lethal-company/p/Ryokune/Physics_Items).
 3. Extract the contents into your Lethal Company's `BepInEx/plugins` folder.
 
 ## Contributing
