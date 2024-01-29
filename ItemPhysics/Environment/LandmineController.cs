@@ -22,7 +22,7 @@ namespace Physics_Items.ItemPhysics.Environment
             List<Collider> list = Physics.OverlapSphere(explosionPosition, 6f, 64, QueryTriggerInteraction.Collide).ToList();
             for (int i = 0; i < list.Count; i++)
             {
-                Vector3 local = (explosionPosition + Vector3.up) - list[i].transform.position;
+                Vector3 local = explosionPosition + Vector3.up - list[i].transform.position;
                 float magnitude = Utils.PhysicsUtil.FastInverseSqrt(local.sqrMagnitude);
                 Vector3 normal = (local).normalized;
                 if (Utils.PhysicsUtil.GetPhysicsComponent(list[i].gameObject, out PhysicsComponent physics))
