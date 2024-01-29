@@ -67,16 +67,17 @@ namespace Physics_Items.ItemPhysics
         private static void GrabbableObject_GrabItem(On.GrabbableObject.orig_GrabItem orig, GrabbableObject self)
         {
             orig(self);
-            if (!Utils.PhysicsUtil.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp)) return;
+            if (!PhysicsUtil.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp)) return;
             comp.alreadyPickedUp = true;
-            var keysToRemove = new List<PhysicsComponent>(comp.collisions.Keys);
-
+            /*var keysToRemove = new List<GameObject>(comp.collisions.Keys);
+            // TODO: Might have to sync this with RPCs, and place it in a different method. eg: inside physics component
             foreach (var key in keysToRemove)
             {
-                if (key.Equals(comp)) continue;
-                key.RemoveCollision(comp);
+                if (key.Equals(comp.gameObject)) continue;
+                Plugin.Logger.LogWarning("removing from grab");
+                PhysicsUtil.GetPhysicsComponent(key)!.RemoveCollision(comp.gameObject);
                 comp.collisions.Remove(key);
-            }
+            }*/
         }
 
         private static void GrabbableObject_ItemActivate(On.GrabbableObject.orig_ItemActivate orig, GrabbableObject self, bool used, bool buttonDown)

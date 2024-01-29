@@ -264,13 +264,7 @@ namespace Physics_Items.ItemPhysics
 
             addedWeight = false;
             isPushed = false;
-            collisions[this] = grabbableObjectRef.itemProperties.weight;
-        }
-
-        public void RemoveCollision(PhysicsComponent comp)
-        {
-            Plugin.Logger.LogWarning($"{gameObject} removing {comp.gameObject}");
-            if (collisions.ContainsKey(comp)) collisions.Remove(comp);
+            collisions[gameObject] = grabbableObjectRef.itemProperties.weight;
         }
 
         void UninitializeVariables()
@@ -396,6 +390,7 @@ namespace Physics_Items.ItemPhysics
         public bool addedWeight = false;
         protected virtual void Update()
         {
+            collisions[gameObject] = grabbableObjectRef.itemProperties.weight;
             if (oldValue != NetworkUtil.ServerHasMod)
             {
                 oldValue = NetworkUtil.ServerHasMod;
@@ -457,7 +452,7 @@ namespace Physics_Items.ItemPhysics
             if (grabbableObjectRef.itemProperties.dropSFX != null)
             {
                 AudioClip clip = grabbableObjectRef.itemProperties.dropSFX;
-                if (ConfigUtil.useSourceSounds.Value) clip = Utils.ListUtil.GetRandomElement(Utils.AssetLoader.allAudioList);
+                if (ConfigUtil.useSourceSounds.Value) clip = ListUtil.GetRandomElement(AssetLoader.allAudioList);
                 float? vol = null;
                 if (audioSource != null) 
                 {
@@ -486,27 +481,6 @@ namespace Physics_Items.ItemPhysics
         static Vector3 velocity;
         static float velocityMag;
 
-
-        public void RemoveCollisions(Collision collision, PhysicsComponent comp)
-        {
-            foreach (ContactPoint contact in collision.contacts)
-            {
-                GameObject target = contact.otherCollider.gameObject;
-                if (target.CompareTag("PhysicsProp"))
-                {
-                    if (PhysicsUtil.GetPhysicsComponent(target, out PhysicsComponent collisionPhysComp))
-                    {
-                        RemoveCollision(collisionPhysComp);
-                    }
-                }
-            }
-            collisions.Remove(comp);
-            if (!collisions.ContainsKey(this))
-            {
-                collisions[this] = grabbableObjectRef.itemProperties.weight;
-            }
-        }
-
         protected virtual void OnCollisionExit(Collision collision)
         {
             /*if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player && isPushed)
@@ -521,29 +495,57 @@ namespace Physics_Items.ItemPhysics
             }*/
             if (collision.gameObject.CompareTag("PhysicsProp"))
             {
-                if(PhysicsUtil.GetPhysicsComponent(collision.gameObject, out PhysicsComponent comp))
+                /*if(PhysicsUtil.GetPhysicsComponent(collision.gameObject, out PhysicsComponent comp))
                 {
-                    if (collisions.ContainsKey(comp))
+                    List<GameObject> compKeys = new List<GameObject>(comp.collisions.Keys);
+                    foreach(var key in compKeys)
                     {
-                        RemoveCollisions(collision, comp);
+                        if (collisions.ContainsKey(key))
+                        {
+                            if (key == gameObject) continue;
+                            collisions.Remove(key);
+                        }
                     }
-                }
+                    if (collisions.ContainsKey(comp.gameObject))
+                    {
+                        collisions.Remove(comp.gameObject);
+                    }
+                    Plugin.Logger.LogWarning("remove :3");
+                    *//*if (collisions.ContainsKey(comp.gameObject))
+                    {
+                        collisions.Remove(comp.gameObject);
+                        RemoveCollisions(collision);
+                    }*//*
+                }*/
             }
             if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player && isPushed)
             {
+                Plugin.Logger.LogWarning("not pushed anymore");
                 isPushed = false;
                 addedWeight = false;
+                current = 0f;
             }
         }
 
-        float sum = 0f;
+        //float sum = 0f;
         //Dictionary<PhysicsComponent, float> cachedCollisions = new Dictionary<PhysicsComponent, float>(); //I know I will figure something out for this
-        public Dictionary<PhysicsComponent, float> collisions = new Dictionary<PhysicsComponent, float>();
+        public Dictionary<GameObject, float> collisions = new Dictionary<GameObject, float>();
 
         PlayerControllerB player => GameNetworkManager.Instance.localPlayerController;
+        HashSet<GameObject> blaclist = new HashSet<GameObject>();
+        float current = 0f;
+
+        // this shit is running EVERY. SINGLE. FRAME. FORLOOPS. NO!!!
         void OnCollisionStay(Collision collision)
         {
             //newCollisions.Clear();
+            if (blaclist.Contains(collision.gameObject) && collision.gameObject.layer != 26) return;
+            collisions.Clear();
+            collisions[gameObject] = grabbableObjectRef.itemProperties.weight;
+            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player)
+            {
+                isPushed = true;
+            }
             foreach (ContactPoint contact in collision.contacts) // I actually big brained on this foreach holy fuck.
             {
                 GameObject target = contact.otherCollider.gameObject;
@@ -552,19 +554,29 @@ namespace Physics_Items.ItemPhysics
                     if (PhysicsUtil.GetPhysicsComponent(target, out PhysicsComponent collisionPhysComp))
                     {
                         if (collisionPhysComp.grabbableObjectRef.isHeld) continue;
-                        if (!collisionPhysComp.collisions.ContainsKey(collisionPhysComp)) collisionPhysComp.collisions[collisionPhysComp] = grabbableObjectRef.itemProperties.weight;
+                        if (!collisionPhysComp.collisions.ContainsKey(collisionPhysComp.gameObject)) collisionPhysComp.collisions[collisionPhysComp.gameObject] = collisionPhysComp.grabbableObjectRef.itemProperties.weight;
+                        if (!collisionPhysComp.collisions.ContainsKey(gameObject)) collisionPhysComp.collisions[gameObject] = grabbableObjectRef.itemProperties.weight;
                         collisions = collisionPhysComp.collisions;
                         //cachedCollisions = collisions;
                     }
+                    else
+                    {
+                        blaclist.Add(target);
+                    }
+                }
+                if (isPushed)
+                {
+                    var pushSumWeight = collisions.Sum(x => x.Value); // Get the sum before adding in the players weight.
+                    var isCarryRight = Mathf.RoundToInt(Mathf.Clamp((player.carryWeight / 105f) + 1f, 1f, 10f)) == 1;
+                    var calculatedSumInZeekers = Mathf.Clamp(pushSumWeight - collisions.Count + 1, 0f, 10f);
+                    Plugin.Logger.LogWarning($"{calculatedSumInZeekers}, {player.carryWeight}, {collisions.Count}, {current}");
                 }
             }
-            
-            sum = collisions.Sum(x => x.Value);
-            if (collisions.Count <= 1) return;
-            foreach(var a in collisions)
+            //if (collisions.Count <= 1) return;
+            /*foreach (var a in collisions)
             {
                 Plugin.Logger.LogWarning($"\n{a.Value}");
-            }
+            }*/
         }
 
 
@@ -595,10 +607,11 @@ namespace Physics_Items.ItemPhysics
                 return;
             }
             // Calculate the force that the player character would experience
-            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player)
+            /*if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player)
             {
                 isPushed = true;
-            }
+                Plugin.Logger.LogWarning("push started");
+            }*/
             if (!firstHit) // So no jumpscare when items first load in xD
             {
                 firstHit = true;
