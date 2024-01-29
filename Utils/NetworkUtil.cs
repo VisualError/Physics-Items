@@ -1,5 +1,5 @@
-﻿
-
+﻿using GameNetcodeStuff;
+using System.Collections.Generic;
 using Unity.Netcode;
 
 namespace Physics_Items.Utils
@@ -8,5 +8,7 @@ namespace Physics_Items.Utils
     {
         public static bool IsServerOrHost => NetworkManager.Singleton.IsHost || NetworkManager.Singleton.IsServer;
         public static bool ServerHasMod = false;
+
+        internal static List<PlayerControllerB> playerControllerBs = new List<PlayerControllerB>();
     }
 }

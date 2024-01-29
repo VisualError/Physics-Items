@@ -1,5 +1,6 @@
 ﻿using GameNetcodeStuff;
 using Physics_Items.ItemPhysics;
+using Physics_Items.Netcode;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -12,11 +13,14 @@ namespace Physics_Items.Utils
     {
         internal static Dictionary<GameObject, PhysicsComponent> physicsComponents = new Dictionary<GameObject, PhysicsComponent>();
         //internal static Dictionary<GameObject, PhysicsComponent> networkedPhysicComponents = new Dictionary<GameObject, Networkp>();
-        internal static List<PlayerControllerB> playerControllerBs = new List<PlayerControllerB>();
-        internal static PhysicsComponent GetPhysicsComponent(GameObject gameObj)
+        internal static PhysicsComponent? GetPhysicsComponent(GameObject gameObj)
         {
+            PhysicsComponent? physicsComponent = null;
             if (physicsComponents.ContainsKey(gameObj)) return physicsComponents[gameObj];
-            return gameObj.GetComponent<PhysicsComponent>();
+            physicsComponent = gameObj.GetComponent<PhysicsComponent>();
+            if (physicsComponent == null) return null;
+            physicsComponents[gameObj] = physicsComponent;
+            return physicsComponents[gameObj];
         }
 
         private const float MinThrowForce = 36f;
@@ -27,6 +31,26 @@ namespace Physics_Items.Utils
             return (startPosition - targetPosition).magnitude;
         }
 
+        public static void AddSync(GrabbableObject grabbableObject)
+        {
+            if (Plugin.Instance.blockList.Contains(grabbableObject.GetType()))
+            {
+                if (ConfigUtil.overrideAllItemPhysics.Value) return;
+                Plugin.Logger.LogWarning($"Skipping Blocked Item: {grabbableObject.gameObject}");
+                return;
+            }
+            SyncronizedComponentAdder component;
+            if (!grabbableObject.gameObject.TryGetComponent(out component))
+            {
+                component = grabbableObject.gameObject.AddComponent<SyncronizedComponentAdder>();
+            }
+            if (component == null)
+            {
+                Plugin.Logger.LogError($"SyncronizedComponentAdder of {grabbableObject.gameObject} is null! This shouldn't happen!");
+                return;
+            }
+            Plugin.Logger.LogInfo($"Successfully added SyncronizedComponentAdder to {grabbableObject.gameObject}.");
+        }
         // TODO: Optimize code
         public static PhysicsComponent? AddPhysicsComponent(GrabbableObject grabbableObject)
         {

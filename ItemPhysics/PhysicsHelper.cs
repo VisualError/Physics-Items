@@ -36,7 +36,7 @@ namespace Physics_Items.ItemPhysics
                 physicsComponentRef.SetRotation();
             }
             if (!physicsComponentRef.alreadyPickedUp) return;
-            if (physicsComponentRef.rigidbody.isKinematic && (!StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase) && (physicsComponentRef.grabbableObjectRef.isInShipRoom || physicsComponentRef.grabbableObjectRef.isInElevator) && !physicsComponentRef.isPlaced)
+            if (physicsComponentRef.rigidbody.isKinematic && (!StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase) && (physicsComponentRef.grabbableObjectRef.isInShipRoom || physicsComponentRef.grabbableObjectRef.isInElevator) && !physicsComponentRef.local_PhysicsVariable.isPlaced)
             {
                 if (!physicsComponentRef.enabled) return;
                 physicsComponentRef.enabled = false;

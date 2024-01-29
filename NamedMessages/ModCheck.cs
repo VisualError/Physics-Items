@@ -81,6 +81,7 @@ namespace Physics_Items.NamedMessages
                 {
                     NetworkManager.Singleton.CustomMessagingManager.UnregisterNamedMessageHandler(RequestModCheck);
                     Plugin.Logger.LogInfo("Destroying Server CustomMessagingManager");
+                    return;
                 }
                 else
                 {
@@ -89,6 +90,7 @@ namespace Physics_Items.NamedMessages
                 }
             }
             hasSameModVersion = false;
+            NetworkUtil.ServerHasMod = false;
         }
 
 

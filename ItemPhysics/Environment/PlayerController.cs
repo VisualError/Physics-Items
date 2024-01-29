@@ -39,10 +39,11 @@ namespace Physics_Items.ItemPhysics.Environment
             orig(self, parentObject, positionOffset, matchRotationOfParent, placeObject);
             Plugin.Logger.LogWarning("placing object");
             if (Plugin.Instance.skipObject.Contains(placeObject)) return;
-            Utils.PhysicsUtil.GetPhysicsComponent(placeObject.gameObject, out PhysicsComponent physics);
+            PhysicsUtil.GetPhysicsComponent(placeObject.gameObject, out PhysicsComponent physics);
             if (physics == null) return;
-            physics.isPlaced = true;
-            physics.rigidbody.isKinematic = true;
+            physics.local_PhysicsVariable.isPlaced = true;
+            physics.rigidbody.isKinematic = true; // TODO: Use the physics variable iskinematic for this. Make logic logic frfr.
+            if(self.IsOwner) physics.net_PhysicsVariable.Value = physics.local_PhysicsVariable;
             placeObject.gameObject.transform.rotation = Quaternion.Euler(placeObject.itemProperties.restingRotation.x, placeObject.floorYRot + placeObject.itemProperties.floorYOffset + 90f, placeObject.itemProperties.restingRotation.z);
             placeObject.gameObject.transform.localPosition = positionOffset;
         }

@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Physics_Items.ItemPhysics
 {
-    internal class PhysicsObject
+    internal class GrabbablePatches
     {
         public static void Init()
         {
@@ -34,7 +34,8 @@ namespace Physics_Items.ItemPhysics
                 component.rigidbody.isKinematic = !enable;
                 if (enable)
                 {
-                    component.isPlaced = false;
+                    component.local_PhysicsVariable.isPlaced = false;
+                    if(component.IsOwner) component.net_PhysicsVariable.Value = component.local_PhysicsVariable;
                 }
             }
         }
@@ -72,10 +73,10 @@ namespace Physics_Items.ItemPhysics
 
             foreach (var key in keysToRemove)
             {
+                if (key.Equals(comp)) continue;
                 key.RemoveCollision(comp);
+                comp.collisions.Remove(key);
             }
-            comp.collisions.Clear();
-            comp.collisions[comp] = self.itemProperties.weight;
         }
 
         private static void GrabbableObject_ItemActivate(On.GrabbableObject.orig_ItemActivate orig, GrabbableObject self, bool used, bool buttonDown)
@@ -91,7 +92,8 @@ namespace Physics_Items.ItemPhysics
             Utils.PhysicsUtil.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp);
             if (comp == null) return;
             comp.EnableColliders(true);
-            comp.isPlaced = true;
+            comp.local_PhysicsVariable.isPlaced = true;
+            if(comp.IsOwner) comp.net_PhysicsVariable.Value = comp.local_PhysicsVariable;
             comp.rigidbody.isKinematic = true;
         }
 

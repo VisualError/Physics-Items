@@ -1,28 +1,25 @@
-﻿using GameNetcodeStuff;
-using MoreShipUpgrades.Patches;
+﻿#region
+using GameNetcodeStuff;
 using Physics_Items.ModCompatFixes;
-using Physics_Items.NamedMessages;
 using Physics_Items.Netcode.NetworkVariables;
 using Physics_Items.Utils;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading;
 using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
 using UnityEngine.Audio;
-using static UnityEngine.ParticleSystem.PlaybackState;
 using Collision = UnityEngine.Collision;
+#endregion
 
 namespace Physics_Items.ItemPhysics
 {
     [RequireComponent(typeof(GrabbableObject))]
     public class PhysicsComponent : NetworkBehaviour, IHittable
     {
-        public NetworkVariable<PhysicsVariables> net_PhysicsVariable = new NetworkVariable<PhysicsVariables>();
+        public NetworkVariable<PhysicsVariables> net_PhysicsVariable = new NetworkVariable<PhysicsVariables>(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
         public PhysicsVariables local_PhysicsVariable = new PhysicsVariables();
         public GrabbableObject grabbableObjectRef;
         public Collider collider;
@@ -31,7 +28,6 @@ namespace Physics_Items.ItemPhysics
         public NetworkObject networkObject;
         public NetworkRigidbody networkRigidbody;
         public PhysicsHelper physicsHelperRef;
-        public bool isPlaced = false;
         public Rigidbody scanNodeRigid;
         public float terminalVelocity;
         public float gravity = 9.8f;
@@ -61,6 +57,7 @@ namespace Physics_Items.ItemPhysics
         {
             // Handle the change...
             Plugin.Logger.LogWarning($"NetworkedPhysicsVariable changed from {oldValue} to {newValue}");
+            local_PhysicsVariable = newValue;
         }
 
         public LungProp apparatusRef; // I have this so I don't have to get component or do an is cast.
@@ -105,8 +102,8 @@ namespace Physics_Items.ItemPhysics
             oldVolume = audioSource.volume;
             defaultPitch = audioSource.pitch;
             up = grabbableObjectRef.itemProperties.verticalOffset * Vector3.up;
-            grabbableObjectRef.itemProperties.syncDiscardFunction = true; // testing.
-            grabbableObjectRef.itemProperties.syncGrabFunction = true; // testing.
+            //grabbableObjectRef.itemProperties.syncDiscardFunction = true; // testing.
+            //grabbableObjectRef.itemProperties.syncGrabFunction = true; // testing.
             if (LethalThingsCompatibility.enabled)
             {
                 LethalThingsCompatibility.ApplyFixes(this);
@@ -239,11 +236,11 @@ namespace Physics_Items.ItemPhysics
             rigidbody.drag = 0.1f;
             if (apparatusRef != null)
             {
-                rigidbody.isKinematic = apparatusRef.isLungDocked || apparatusRef.isLungDockedInElevator || isPlaced;
+                rigidbody.isKinematic = apparatusRef.isLungDocked || apparatusRef.isLungDockedInElevator || local_PhysicsVariable.isPlaced;
             }
             else
             {
-                rigidbody.isKinematic = isPlaced; // might mess up the popup notification.
+                rigidbody.isKinematic = local_PhysicsVariable.isPlaced; // might mess up the popup notification.
             }
 
             networkTransform.SyncScaleX = false;
@@ -272,6 +269,7 @@ namespace Physics_Items.ItemPhysics
 
         public void RemoveCollision(PhysicsComponent comp)
         {
+            Plugin.Logger.LogWarning($"{gameObject} removing {comp.gameObject}");
             if (collisions.ContainsKey(comp)) collisions.Remove(comp);
         }
 
@@ -279,6 +277,7 @@ namespace Physics_Items.ItemPhysics
         {
             //grabbableObjectRef.itemProperties.itemSpawnsOnGround = true;
             Plugin.Logger.LogWarning("disable");
+            if (!HasRequiredComponents()) return;
             grabbableObjectRef.EnablePhysics(false); // Do this first so the EnablePhysics patch doesn't get skipped.
             Plugin.Instance.skipObject.Add(grabbableObjectRef);
             EnableColliders(true);
@@ -307,6 +306,7 @@ namespace Physics_Items.ItemPhysics
 
         bool HasRequiredComponents()
         {
+            if (gameObject == null) return false;
             if (rigidbody == null)
             {
                 Plugin.Logger.LogError($"Rigidbody doesn't exist for Game Object {gameObject}");
@@ -404,17 +404,17 @@ namespace Physics_Items.ItemPhysics
             }
             if (apparatusRef != null) // I want to shoot the apparatus with a water gun.
             {
-                bool isDocked = apparatusRef.isLungDocked || apparatusRef.isLungDockedInElevator || (!StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase || isPlaced);
+                bool isDocked = apparatusRef.isLungDocked || apparatusRef.isLungDockedInElevator || (!StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase || local_PhysicsVariable.isPlaced);
                 if (rigidbody.isKinematic == isDocked) return;
                 rigidbody.isKinematic = isDocked;
             }
             else
             {
-                rigidbody.isKinematic = ((grabbableObjectRef.isInShipRoom || grabbableObjectRef.isInElevator) && !StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase) || isPlaced; // TODO: Make items work when ship is moving.
+                rigidbody.isKinematic = ((grabbableObjectRef.isInShipRoom || grabbableObjectRef.isInElevator) && !StartOfRound.Instance.shipHasLanded && !StartOfRound.Instance.inShipPhase) || local_PhysicsVariable.isPlaced; // TODO: Make items work when ship is moving.
             }
             if (grabbableObjectRef.isInShipRoom || grabbableObjectRef.isInElevator)
             {
-                if (rigidbody.isKinematic && !isPlaced)
+                if (rigidbody.isKinematic && !local_PhysicsVariable.isPlaced)
                 {
                     /*if (addedWeight)
                     {
@@ -496,7 +496,7 @@ namespace Physics_Items.ItemPhysics
                 {
                     if (PhysicsUtil.GetPhysicsComponent(target, out PhysicsComponent collisionPhysComp))
                     {
-                        collisions.Remove(collisionPhysComp);
+                        RemoveCollision(collisionPhysComp);
                     }
                 }
             }
@@ -537,13 +537,13 @@ namespace Physics_Items.ItemPhysics
         }
 
         float sum = 0f;
-        Dictionary<PhysicsComponent, float> newCollisions = new Dictionary<PhysicsComponent, float>();
+        //Dictionary<PhysicsComponent, float> cachedCollisions = new Dictionary<PhysicsComponent, float>(); //I know I will figure something out for this
         public Dictionary<PhysicsComponent, float> collisions = new Dictionary<PhysicsComponent, float>();
 
         PlayerControllerB player => GameNetworkManager.Instance.localPlayerController;
         void OnCollisionStay(Collision collision)
         {
-            newCollisions.Clear();
+            //newCollisions.Clear();
             foreach (ContactPoint contact in collision.contacts) // I actually big brained on this foreach holy fuck.
             {
                 GameObject target = contact.otherCollider.gameObject;
@@ -554,12 +554,17 @@ namespace Physics_Items.ItemPhysics
                         if (collisionPhysComp.grabbableObjectRef.isHeld) continue;
                         if (!collisionPhysComp.collisions.ContainsKey(collisionPhysComp)) collisionPhysComp.collisions[collisionPhysComp] = grabbableObjectRef.itemProperties.weight;
                         collisions = collisionPhysComp.collisions;
-                        newCollisions = collisions;
+                        //cachedCollisions = collisions;
                     }
                 }
             }
+            
             sum = collisions.Sum(x => x.Value);
             if (collisions.Count <= 1) return;
+            foreach(var a in collisions)
+            {
+                Plugin.Logger.LogWarning($"\n{a.Value}");
+            }
         }
 
 
@@ -583,8 +588,6 @@ namespace Physics_Items.ItemPhysics
         // This is so scuffed
         protected virtual void OnCollisionEnter(Collision collision)
         {
-            local_PhysicsVariable.IsKinematic = !net_PhysicsVariable.Value.IsKinematic;
-            net_PhysicsVariable.Value = local_PhysicsVariable;
             if (collision.gameObject.layer == 26 && ConfigUtil.disablePlayerCollision.Value)
             {
                 Physics.IgnoreCollision(collider, collision.gameObject.GetComponent<Collider>(), true);
@@ -610,7 +613,7 @@ namespace Physics_Items.ItemPhysics
                 {
                     NetworkManager.Singleton.CustomMessagingManager.SendNamedMessage(OnCollision.CollisionCheck, client.ClientId, writer, NetworkDelivery.ReliableSequenced);
                 }*/
-                OnCollisionServerRpc();
+                OnCollisionClientRpc();
             }
             else if(!NetworkUtil.ServerHasMod)
             {
@@ -634,7 +637,7 @@ namespace Physics_Items.ItemPhysics
 
         public override void OnDestroy()
         {
-            PhysicsUtil.RemovePhysicsComponent(gameObject);
+            if(HasRequiredComponents()) PhysicsUtil.RemovePhysicsComponent(gameObject);
             base.OnDestroy();
         }
 

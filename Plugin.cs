@@ -104,8 +104,8 @@ namespace Physics_Items
 
             #region "MonoMod Hooks"
 
-            ItemPhysics.Environment.Landmine.Init();
-            PhysicsObject.Init();
+            ItemPhysics.Environment.LandmineController.Init();
+            GrabbablePatches.Init();
             PlayerController.Init();
             On.GameNetworkManager.Awake += GameNetworkManager_Awake;
             #endregion
@@ -125,7 +125,7 @@ namespace Physics_Items
             if (Initialized) return;
             foreach (GrabbableObject grabbableObject in Resources.FindObjectsOfTypeAll<GrabbableObject>())
             {
-                if (grabbableObject.gameObject == null) return;
+                if (grabbableObject.gameObject == null) continue;
                 ConfigUtil.InitializeBlocklistConfig(grabbableObject);
                 if (blockList.Contains(grabbableObject.GetType()))
                 {

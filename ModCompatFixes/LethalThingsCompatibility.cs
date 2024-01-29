@@ -1,4 +1,5 @@
-﻿using Physics_Items.ItemPhysics;
+﻿using LethalThings.MonoBehaviours;
+using Physics_Items.ItemPhysics;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -35,6 +36,12 @@ namespace Physics_Items.ModCompatFixes
                     break;
             }
             On.GameNetcodeStuff.PlayerControllerB.SetObjectAsNoLongerHeld += PlayerControllerB_SetObjectAsNoLongerHeld;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
+        public static bool hasCustomNetworkTransform(GameObject gameObj)
+        {
+            return gameObj.GetComponent<CustomNetworkTransform>() != null;
         }
 
         private static void PlayerControllerB_SetObjectAsNoLongerHeld(On.GameNetcodeStuff.PlayerControllerB.orig_SetObjectAsNoLongerHeld orig, GameNetcodeStuff.PlayerControllerB self, bool droppedInElevator, bool droppedInShipRoom, Vector3 targetFloorPosition, GrabbableObject dropObject, int floorYRot)
