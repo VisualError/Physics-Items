@@ -43,7 +43,7 @@ namespace Physics_Items.ModCompatFixes
             switch (dropObject)
             {
                 case LethalThings.Dingus dingus:
-                    Utils.Physics.GetPhysicsComponent(dingus.gameObject, out PhysicsComponent physics);
+                    Utils.PhysicsUtil.GetPhysicsComponent(dingus.gameObject, out PhysicsComponent physics);
                     if (physics == null) return;
                     if (!physics.alreadyPickedUp) return;
                     physics.SetRotation();

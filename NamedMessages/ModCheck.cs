@@ -1,5 +1,6 @@
 ﻿using GameNetcodeStuff;
 using HarmonyLib;
+using Physics_Items.Utils;
 using System;
 using Unity.Netcode;
 using UnityEngine.Diagnostics;
@@ -48,7 +49,7 @@ namespace Physics_Items.NamedMessages
 
         private static void SyncOnLocalClient()
         {
-            Plugin.Instance.ServerHasMod = hasSameModVersion;
+            NetworkUtil.ServerHasMod = hasSameModVersion;
         }
 
         private static void OnReceive(ulong senderClientId, FastBufferReader messagePayload)

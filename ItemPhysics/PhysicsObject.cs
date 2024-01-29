@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Physics_Items.Utils;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -7,7 +8,7 @@ using UnityEngine;
 
 namespace Physics_Items.ItemPhysics
 {
-    internal class GrabbablePatches
+    internal class PhysicsObject
     {
         public static void Init()
         {
@@ -20,36 +21,6 @@ namespace Physics_Items.ItemPhysics
             On.GrabbableObject.GrabItem += GrabbableObject_GrabItem;
         }
 
-        // TODO: Optimize code
-        internal static PhysicsComponent AddPhysicsComponent(GrabbableObject grabbableObject)
-        {
-            if (grabbableObject.gameObject.GetComponent<NetworkObject>() == null) return null;
-            if (Plugin.Instance.blockList.Contains(grabbableObject.GetType()))
-            {
-                if (Plugin.Instance.overrideAllItemPhysics.Value) return null;
-                Plugin.Logger.LogWarning($"Skipping Blocked Item: {grabbableObject.gameObject}");
-                grabbableObject.gameObject.AddComponent<DestroyHelper>();
-                Plugin.Instance.skipObject.Add(grabbableObject);
-                return null;
-            }
-            PhysicsComponent component;
-            if (!grabbableObject.gameObject.TryGetComponent(out component))
-            {
-                component = grabbableObject.gameObject.AddComponent<PhysicsComponent>();
-            }
-            if (component == null)
-            {
-                Plugin.Logger.LogError($"Physics Component of {grabbableObject.gameObject} is null! This shouldn't happen!");
-                return null;
-            }
-            Plugin.Logger.LogInfo($"Successfully added Physics Component to {grabbableObject.gameObject}.");
-            if (grabbableObject.TryGetComponent(out Collider collider))
-            {
-                collider.isTrigger = false; // I'm not sure if this will break anything. I'm doing this because the Teeth item spawns out of existence if isTrigger is true.
-            }
-            return component;
-        }
-
         private static void GrabbableObject_EnablePhysics(On.GrabbableObject.orig_EnablePhysics orig, GrabbableObject self, bool enable)
         {
             if (Plugin.Instance.skipObject.Contains(self))
@@ -57,7 +28,7 @@ namespace Physics_Items.ItemPhysics
                 orig(self, enable);
                 return;
             }
-            if (Utils.Physics.GetPhysicsComponent(self.gameObject, out PhysicsComponent component))
+            if (Utils.PhysicsUtil.GetPhysicsComponent(self.gameObject, out PhysicsComponent component))
             {
                 component.EnableColliders(enable);
                 component.rigidbody.isKinematic = !enable;
@@ -78,7 +49,7 @@ namespace Physics_Items.ItemPhysics
 
         private static void GrabbableObject_Start(On.GrabbableObject.orig_Start orig, GrabbableObject self)
         {
-            if (Utils.Physics.GetPhysicsComponent(self.gameObject) != null)
+            /*if (Utils.Physics.GetPhysicsComponent(self.gameObject) != null)
             {
                 orig(self);
                 return;
@@ -88,14 +59,14 @@ namespace Physics_Items.ItemPhysics
             {
                 comp.enabled = false;
                 Plugin.Instance.skipObject.Add(self);
-            }
+            }*/
             orig(self);
         }
 
         private static void GrabbableObject_GrabItem(On.GrabbableObject.orig_GrabItem orig, GrabbableObject self)
         {
             orig(self);
-            if (!Utils.Physics.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp)) return;
+            if (!Utils.PhysicsUtil.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp)) return;
             comp.alreadyPickedUp = true;
             var keysToRemove = new List<PhysicsComponent>(comp.collisions.Keys);
 
@@ -117,7 +88,7 @@ namespace Physics_Items.ItemPhysics
         {
             orig(self);
             if (Plugin.Instance.skipObject.Contains(self)) return;
-            Utils.Physics.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp);
+            Utils.PhysicsUtil.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp);
             if (comp == null) return;
             comp.EnableColliders(true);
             comp.isPlaced = true;

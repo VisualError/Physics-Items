@@ -2,11 +2,14 @@
 using MoreShipUpgrades.Patches;
 using Physics_Items.ModCompatFixes;
 using Physics_Items.NamedMessages;
+using Physics_Items.Netcode.NetworkVariables;
+using Physics_Items.Utils;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
@@ -17,8 +20,10 @@ using Collision = UnityEngine.Collision;
 namespace Physics_Items.ItemPhysics
 {
     [RequireComponent(typeof(GrabbableObject))]
-    public class PhysicsComponent : MonoBehaviour, IHittable
+    public class PhysicsComponent : NetworkBehaviour, IHittable
     {
+        public NetworkVariable<PhysicsVariables> net_PhysicsVariable = new NetworkVariable<PhysicsVariables>();
+        public PhysicsVariables local_PhysicsVariable = new PhysicsVariables();
         public GrabbableObject grabbableObjectRef;
         public Collider collider;
         public Rigidbody rigidbody;
@@ -37,6 +42,26 @@ namespace Physics_Items.ItemPhysics
         public float defaultPitch;
 
         public AudioSource audioSource;
+
+        public override void OnNetworkSpawn()
+        {
+            base.OnNetworkSpawn();
+            string _isHost = NetworkUtil.IsServerOrHost ? "Host" : "Client";
+            Plugin.Logger.LogWarning($"Network spawn called by: {_isHost}");
+            net_PhysicsVariable.OnValueChanged += OnNet_PhysicsVariableChanged;
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            base.OnNetworkDespawn();
+            net_PhysicsVariable.OnValueChanged -= OnNet_PhysicsVariableChanged;
+        }
+
+        private void OnNet_PhysicsVariableChanged(PhysicsVariables oldValue, PhysicsVariables newValue)
+        {
+            // Handle the change...
+            Plugin.Logger.LogWarning($"NetworkedPhysicsVariable changed from {oldValue} to {newValue}");
+        }
 
         public LungProp apparatusRef; // I have this so I don't have to get component or do an is cast.
         void Awake()
@@ -74,7 +99,7 @@ namespace Physics_Items.ItemPhysics
             {
                 apparatusRef = lungProp;
             }
-            audioSource = Utils.Physics.CopyComponent(gameObject.GetComponent<AudioSource>(), gameObject);
+            audioSource = PhysicsUtil.CopyComponent(gameObject.GetComponent<AudioSource>(), gameObject);
             physicsHelperRef = gameObject.AddComponent<PhysicsHelper>();
             collider = gameObject.GetComponent<Collider>();
             oldVolume = audioSource.volume;
@@ -129,7 +154,7 @@ namespace Physics_Items.ItemPhysics
                     // Add the item's position to the cell center
                     cellCenter += transform.position;
                     Material? material = null;
-                    if (Plugin.Instance.DebuggingStuff.Value)
+                    if (ConfigUtil.DebuggingStuff.Value)
                     {
                         primitives[cellCenter] = GameObject.CreatePrimitive(PrimitiveType.Cube);
                         primitives[cellCenter].layer = 6;
@@ -145,12 +170,12 @@ namespace Physics_Items.ItemPhysics
                     int overlap = Physics.OverlapBoxNonAlloc(cellCenter, halfExtents, results, Quaternion.identity, 2318, QueryTriggerInteraction.Ignore);
                     if (overlap <= 1 || overlap <= 0)
                     {
-                        if (Plugin.Instance.DebuggingStuff.Value) Plugin.Logger.LogWarning($"Found free spot at: {cellCenter}");
+                        if (ConfigUtil.DebuggingStuff.Value) Plugin.Logger.LogWarning($"Found free spot at: {cellCenter}");
                         if(material != null) material.color = Color.yellow;
                         float distance = Vector3.Distance(cellCenter, transform.position);
                         if (distance < minDistance)
                         {
-                            if (Plugin.Instance.DebuggingStuff.Value) Plugin.Logger.LogWarning($"Found closer distance at: {cellCenter}");
+                            if (ConfigUtil.DebuggingStuff.Value) Plugin.Logger.LogWarning($"Found closer distance at: {cellCenter}");
                             minDistance = distance;
                             closestFreeSpot = cellCenter;
                             if (closestFreeSpot == transform.position) break;
@@ -160,7 +185,7 @@ namespace Physics_Items.ItemPhysics
             }
             if (minDistance != Mathf.Infinity)
             {
-                if (Plugin.Instance.DebuggingStuff.Value)
+                if (ConfigUtil.DebuggingStuff.Value)
                 {
                     Plugin.Logger.LogWarning($"Moving item to closest free spot at: {closestFreeSpot}");
                     GameObject originalPosition = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -175,7 +200,7 @@ namespace Physics_Items.ItemPhysics
                     originalPosition.GetComponent<Collider>().enabled = false;
                 }
                 transform.position = closestFreeSpot;
-                if (Plugin.Instance.DebuggingStuff.Value && primitives.ContainsKey(closestFreeSpot))
+                if (ConfigUtil.DebuggingStuff.Value && primitives.ContainsKey(closestFreeSpot))
                 {
                     Material material = primitives[closestFreeSpot].GetComponent<Renderer>().material;
                     material.color = Color.green;
@@ -207,8 +232,8 @@ namespace Physics_Items.ItemPhysics
         {
 
             //SetPosition();
-            alreadyPickedUp = !Plugin.Instance.physicsOnPickup.Value;
-            grabbableObjectRef.itemProperties.itemSpawnsOnGround = Plugin.Instance.physicsOnPickup.Value;
+            alreadyPickedUp = !ConfigUtil.physicsOnPickup.Value;
+            grabbableObjectRef.itemProperties.itemSpawnsOnGround = ConfigUtil.physicsOnPickup.Value;
             //rigidbody.detectCollisions = true;
             rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             rigidbody.drag = 0.1f;
@@ -225,7 +250,7 @@ namespace Physics_Items.ItemPhysics
             networkTransform.SyncScaleY = false;
             networkTransform.SyncScaleZ = false;
 
-            networkTransform.enabled = Plugin.Instance.ServerHasMod;
+            networkTransform.enabled = NetworkUtil.ServerHasMod;
 
             grabbableObjectRef.fallTime = 1f;
             grabbableObjectRef.reachedFloorTarget = true;
@@ -279,13 +304,6 @@ namespace Physics_Items.ItemPhysics
         {
             UninitializeVariables();
         }
-
-        /*public override void OnNetworkSpawn()
-        {
-            base.OnNetworkSpawn();
-            Plugin.Logger.LogWarning("network spawn called");
-            
-        }*/
 
         bool HasRequiredComponents()
         {
@@ -345,7 +363,7 @@ namespace Physics_Items.ItemPhysics
         public float threshold = 0.1f; // Adjust this value based on your needs
         protected virtual void FixedUpdate()
         {
-            if (IsHostOrServer || !Plugin.Instance.ServerHasMod)
+            if (IsHostOrServer || !NetworkUtil.ServerHasMod)
             {
                 if (!rigidbody.isKinematic && !grabbableObjectRef.isHeld)
                 {
@@ -357,14 +375,6 @@ namespace Physics_Items.ItemPhysics
                     rigidbody.AddForce(Vector3.zero, ForceMode.VelocityChange);
                 }
             }
-            /*Vector3 currentVelocity = rigidbody.velocity;
-            if ((currentVelocity - lastVelocity).sqrMagnitude > threshold * threshold)
-            {
-                Vector3 opposingForce = -rigidbody.velocity * rigidbody.drag * rigidbody.velocity.sqrMagnitude;
-                rigidbody.AddForce(opposingForce, ForceMode.Acceleration);
-                Plugin.Logger.LogWarning($"Adding opposing force: {opposingForce}");
-            }
-            lastVelocity = currentVelocity;*/
         }
 
         public void EnableColliders(bool enable)
@@ -386,11 +396,11 @@ namespace Physics_Items.ItemPhysics
         public bool addedWeight = false;
         protected virtual void Update()
         {
-            if (oldValue != Plugin.Instance.ServerHasMod)
+            if (oldValue != NetworkUtil.ServerHasMod)
             {
-                oldValue = Plugin.Instance.ServerHasMod;
-                Plugin.Logger.LogWarning($"Setting {gameObject} Network Transform enabled to {Plugin.Instance.ServerHasMod}");
-                networkTransform.enabled = Plugin.Instance.ServerHasMod;
+                oldValue = NetworkUtil.ServerHasMod;
+                Plugin.Logger.LogWarning($"Setting {gameObject} Network Transform enabled to {NetworkUtil.ServerHasMod}");
+                networkTransform.enabled = NetworkUtil.ServerHasMod;
             }
             if (apparatusRef != null) // I want to shoot the apparatus with a water gun.
             {
@@ -432,11 +442,7 @@ namespace Physics_Items.ItemPhysics
                 parent = transform;
             }
             return parent;
-        }
-
-        public Dictionary<PhysicsComponent, float> collisions = new Dictionary<PhysicsComponent, float>();
-
-        
+        }        
 
         public void PlayDropSFX()
         {
@@ -451,20 +457,20 @@ namespace Physics_Items.ItemPhysics
             if (grabbableObjectRef.itemProperties.dropSFX != null)
             {
                 AudioClip clip = grabbableObjectRef.itemProperties.dropSFX;
-                if (Plugin.Instance.useSourceSounds.Value) clip = Utils.ListUtil.GetRandomElement(Utils.AssetLoader.allAudioList);
+                if (ConfigUtil.useSourceSounds.Value) clip = Utils.ListUtil.GetRandomElement(Utils.AssetLoader.allAudioList);
                 float? vol = null;
                 if (audioSource != null) 
                 {
                     if (force != Vector3.zero)
                     {
-                        vol = Mathf.Min(force.magnitude, Plugin.Instance.maxCollisionVolume.Value);
+                        vol = Mathf.Min(force.magnitude, ConfigUtil.maxCollisionVolume.Value);
                     }
                     else
                     {
-                        vol = Mathf.Clamp(velocityMag, 0.6f, Plugin.Instance.maxCollisionVolume.Value); //Mathf.Min(velocityMag, oldVolume); //oldVolume;
+                        vol = Mathf.Clamp(velocityMag, 0.6f, ConfigUtil.maxCollisionVolume.Value); //Mathf.Min(velocityMag, oldVolume); //oldVolume;
                     }
                     audioSource.volume = vol.Value; //Mathf.Clamp(velocityMag, 0f, audioSource.maxDistance);
-                    audioSource.pitch = Utils.Physics.mapValue(rigidbody.velocity.magnitude, .9f, 10f, .9f, defaultPitch+0.5f);
+                    audioSource.pitch = PhysicsUtil.mapValue(rigidbody.velocity.magnitude, .9f, 10f, .9f, defaultPitch+0.5f);
                     audioSource.PlayOneShot(clip, audioSource.volume);
                     //Plugin.Logger.LogWarning($"Playing with volome {audioSource.pitch}: {audioSource.volume}, {audioSource.minDistance} {audioSource.maxDistance}");
                 }
@@ -488,7 +494,7 @@ namespace Physics_Items.ItemPhysics
                 GameObject target = contact.otherCollider.gameObject;
                 if (target.CompareTag("PhysicsProp"))
                 {
-                    if (Utils.Physics.GetPhysicsComponent(target, out PhysicsComponent collisionPhysComp))
+                    if (PhysicsUtil.GetPhysicsComponent(target, out PhysicsComponent collisionPhysComp))
                     {
                         collisions.Remove(collisionPhysComp);
                     }
@@ -515,7 +521,7 @@ namespace Physics_Items.ItemPhysics
             }*/
             if (collision.gameObject.CompareTag("PhysicsProp"))
             {
-                if(Utils.Physics.GetPhysicsComponent(collision.gameObject, out PhysicsComponent comp))
+                if(PhysicsUtil.GetPhysicsComponent(collision.gameObject, out PhysicsComponent comp))
                 {
                     if (collisions.ContainsKey(comp))
                     {
@@ -527,47 +533,33 @@ namespace Physics_Items.ItemPhysics
             {
                 isPushed = false;
                 addedWeight = false;
-                previousPlayerWeight = 0f;
             }
         }
 
         float sum = 0f;
-        float previousPlayerWeight = 0f;
-        StringBuilder builder = new StringBuilder();
+        Dictionary<PhysicsComponent, float> newCollisions = new Dictionary<PhysicsComponent, float>();
+        public Dictionary<PhysicsComponent, float> collisions = new Dictionary<PhysicsComponent, float>();
 
         PlayerControllerB player => GameNetworkManager.Instance.localPlayerController;
         void OnCollisionStay(Collision collision)
         {
+            newCollisions.Clear();
             foreach (ContactPoint contact in collision.contacts) // I actually big brained on this foreach holy fuck.
             {
                 GameObject target = contact.otherCollider.gameObject;
                 if (target.CompareTag("PhysicsProp"))
                 {
-                    if (Utils.Physics.GetPhysicsComponent(target, out PhysicsComponent collisionPhysComp))
+                    if (PhysicsUtil.GetPhysicsComponent(target, out PhysicsComponent collisionPhysComp))
                     {
                         if (collisionPhysComp.grabbableObjectRef.isHeld) continue;
                         if (!collisionPhysComp.collisions.ContainsKey(collisionPhysComp)) collisionPhysComp.collisions[collisionPhysComp] = grabbableObjectRef.itemProperties.weight;
                         collisions = collisionPhysComp.collisions;
+                        newCollisions = collisions;
                     }
                 }
             }
-            if (!(collisions.Count <= 1))
-            {
-                builder.Clear();
-                foreach (var col in collisions)
-                {
-                    builder.Append($"\nOLD{gameObject.name}: {col.Key}: {col.Value}");
-                }
-                Plugin.Logger.LogWarning(builder.ToString());
-            }
             sum = collisions.Sum(x => x.Value);
             if (collisions.Count <= 1) return;
-            builder.Clear();
-            foreach (var col in collisions)
-            {
-                builder.Append($"\nNEW {gameObject.name}: {col.Key}: {col.Value}");
-            }
-            Plugin.Logger.LogWarning(builder.ToString());
         }
 
 
@@ -591,7 +583,9 @@ namespace Physics_Items.ItemPhysics
         // This is so scuffed
         protected virtual void OnCollisionEnter(Collision collision)
         {
-            if (collision.gameObject.layer == 26 && Plugin.Instance.disablePlayerCollision.Value)
+            local_PhysicsVariable.IsKinematic = !net_PhysicsVariable.Value.IsKinematic;
+            net_PhysicsVariable.Value = local_PhysicsVariable;
+            if (collision.gameObject.layer == 26 && ConfigUtil.disablePlayerCollision.Value)
             {
                 Physics.IgnoreCollision(collider, collision.gameObject.GetComponent<Collider>(), true);
                 isPushed = false;
@@ -609,25 +603,39 @@ namespace Physics_Items.ItemPhysics
             }
             if (IsHostOrServer)
             {
-                NetworkObjectReference networkRef = networkObject;
+                /*NetworkObjectReference networkRef = networkObject;
                 FastBufferWriter writer = new FastBufferWriter(FastBufferWriter.GetWriteSize(networkRef), Unity.Collections.Allocator.Temp);
                 writer.WriteValueSafe(networkRef);
                 foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
                 {
                     NetworkManager.Singleton.CustomMessagingManager.SendNamedMessage(OnCollision.CollisionCheck, client.ClientId, writer, NetworkDelivery.ReliableSequenced);
-                }
+                }*/
+                OnCollisionServerRpc();
             }
-            else if(!Plugin.Instance.ServerHasMod)
+            else if(!NetworkUtil.ServerHasMod)
             {
                 PlayDropSFX();
             }
             velocity = rigidbody.velocity;
-            velocityMag = Utils.Physics.FastInverseSqrt(velocity.sqrMagnitude);
+            velocityMag = PhysicsUtil.FastInverseSqrt(velocity.sqrMagnitude);
         }
 
-        void OnDestroy()
+        [ServerRpc]
+        void OnCollisionServerRpc() 
         {
-            Utils.Physics.RemovePhysicsComponent(gameObject);
+            OnCollisionClientRpc();
+        }
+
+        [ClientRpc]
+        void OnCollisionClientRpc()
+        {
+            PlayDropSFX();
+        }
+
+        public override void OnDestroy()
+        {
+            PhysicsUtil.RemovePhysicsComponent(gameObject);
+            base.OnDestroy();
         }
 
         Vector3? oldPosition;
@@ -676,15 +684,9 @@ namespace Physics_Items.ItemPhysics
             isHit = true;
             if (IsHostOrServer)
             {
-                NetworkObjectReference networkRef = networkObject;
-                FastBufferWriter writer = new FastBufferWriter(FastBufferWriter.GetWriteSize(networkRef), Unity.Collections.Allocator.Temp);
-                writer.WriteValueSafe(networkRef);
-                foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
-                {
-                    NetworkManager.Singleton.CustomMessagingManager.SendNamedMessage(OnCollision.CollisionCheck, client.ClientId, writer, NetworkDelivery.ReliableSequenced);
-                }
+                
             }
-            else if (!Plugin.Instance.ServerHasMod)
+            else if (!NetworkUtil.ServerHasMod)
             {
                 PlayDropSFX();
             }

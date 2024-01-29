@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Physics_Items.Utils;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -26,8 +27,8 @@ namespace Physics_Items.ItemPhysics
         // wahhh
         void Update()
         {
-            if (!grabbableObjectRef.isHeld && Plugin.Instance.physicsOnPickup.Value || !physicsComponentRef.alreadyPickedUp) return; //gufdsu guhdsahbdhg
-            if (!physicsComponentRef.alreadyPickedUp && !physicsComponentRef.alreadyPickedUp != Plugin.Instance.physicsOnPickup.Value && physicsComponentRef.grabbableObjectRef.hasHitGround && why)
+            if (!grabbableObjectRef.isHeld && ConfigUtil.physicsOnPickup.Value || !physicsComponentRef.alreadyPickedUp) return; //gufdsu guhdsahbdhg
+            if (!physicsComponentRef.alreadyPickedUp && !physicsComponentRef.alreadyPickedUp != ConfigUtil.physicsOnPickup.Value && physicsComponentRef.grabbableObjectRef.hasHitGround && why)
             {
                 physicsComponentRef.alreadyPickedUp = true;
                 physicsComponentRef.enabled = true;

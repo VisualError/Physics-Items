@@ -32,28 +32,28 @@
 			<HintPath>$(LETHAL_COMPANY_DIR)/Lethal Company_Data/Managed/Unity.Netcode.Components.dll</HintPath>
 		</Reference>
 		<Reference Include="MMHOOK_Assembly-CSharp">
-			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/MMHOOK/MMHOOK_Assembly-CSharp.dll</HintPath>
+			<HintPath>$(MOD_ASSEMBLIES)/BepInEx/plugins/MMHOOK/MMHOOK_Assembly-CSharp.dll</HintPath>
 		</Reference>
 		<Reference Include="Spantle.ThrowEverything" Publicize="true">
-			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/Spantle-ThrowEverything/Spantle.ThrowEverything.dll</HintPath>
+			<HintPath>$(MOD_ASSEMBLIES)/BepInEx/plugins/Spantle-ThrowEverything/Spantle.ThrowEverything.dll</HintPath>
 		</Reference>
 		<Reference Include="com.potatoepet.AdvancedCompany" Publicize="true">
-			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/PotatoePet-AdvancedCompany/advancedcompany/AdvancedCompany.dll</HintPath>
+			<HintPath>$(MOD_ASSEMBLIES)/BepInEx/plugins/PotatoePet-AdvancedCompany/advancedcompany/AdvancedCompany.dll</HintPath>
 		</Reference>
 		<Reference Include="Jordo.NeedyCats" Publicize="true">
-			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/Jordo-NeedyCats/NeedyCats.dll</HintPath>
+			<HintPath>$(MOD_ASSEMBLIES)/BepInEx/plugins/Jordo-NeedyCats/NeedyCats.dll</HintPath>
 		</Reference>
 		<Reference Include="evaisa.lethalthings" Publicize="true">
-			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/Evaisa-LethalThings/LethalThings/LethalThings.dll</HintPath>
+			<HintPath>$(MOD_ASSEMBLIES)/BepInEx/plugins/Evaisa-LethalThings/LethalThings/LethalThings.dll</HintPath>
 		</Reference>
 		<Reference Include="com.malco.lethalcompany.moreshipupgrades" Publicize="true">
-			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/malco-Lategame_Upgrades/MoreShipUpgrades/MoreShipUpgrades.dll</HintPath>
+			<HintPath>$(MOD_ASSEMBLIES)/BepInEx/plugins/malco-Lategame_Upgrades/MoreShipUpgrades/MoreShipUpgrades.dll</HintPath>
 		</Reference>
 		<Reference Include="com.malco.lethalcompany.moreshipupgrades" Publicize="true">
-			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/malco-Lategame_Upgrades/MoreShipUpgrades/MoreShipUpgrades.dll</HintPath>
+			<HintPath>$(MOD_ASSEMBLIES)/BepInEx/plugins/malco-Lategame_Upgrades/MoreShipUpgrades/MoreShipUpgrades.dll</HintPath>
 		</Reference>
 		<Reference Include="ainavt.lc.lethalconfig" Publicize="true">
-			<HintPath>$(TEST_PROFILE_DIR)/BepInEx/plugins/AinaVT-LethalConfig/LethalConfig/LethalConfig.dll</HintPath>
+			<HintPath>$(MOD_ASSEMBLIES)/BepInEx/plugins/AinaVT-LethalConfig/LethalConfig/LethalConfig.dll</HintPath>
 		</Reference>
 	</ItemGroup>
 	
@@ -67,6 +67,10 @@
   <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all" />
   </ItemGroup>
+	
+	<Target Name="NetcodePatch" AfterTargets="PostBuildEvent" Condition="true">
+		<Exec Command="netcode-patch &quot;$(TargetPath)&quot; @(ReferencePathWithRefAssemblies->'&quot;%(Identity)&quot;', ' ')" />
+	</Target>
   
   <ItemGroup>
     <Compile Update="Properties\Resources.Designer.cs">
