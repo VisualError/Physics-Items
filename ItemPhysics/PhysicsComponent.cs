@@ -19,7 +19,7 @@ using Collision = UnityEngine.Collision;
 
 // If anyone is ever looking at this for enlightenment, you've come to the wrong place. I warn you. The names are not what they actually mean. Proceed with caution.
 
-// Comment cemetary.
+// Comment cemetery.
 namespace Physics_Items.ItemPhysics
 {
     [RequireComponent(typeof(GrabbableObject))]
