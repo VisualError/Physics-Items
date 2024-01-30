@@ -13,9 +13,13 @@ using Unity.Netcode.Components;
 using UnityEngine;
 using UnityEngine.Audio;
 using static System.Net.Mime.MediaTypeNames;
+using static UnityEngine.ParticleSystem.PlaybackState;
 using Collision = UnityEngine.Collision;
 #endregion
 
+// If anyone is ever looking at this for enlightenment, you've come to the wrong place. I warn you. The names are not what they actually mean. Proceed with caution.
+
+// Comment cemetary.
 namespace Physics_Items.ItemPhysics
 {
     [RequireComponent(typeof(GrabbableObject))]
@@ -265,7 +269,7 @@ namespace Physics_Items.ItemPhysics
             rigidbody.velocity = Vector3.zero;
 
             addedWeight = false;
-            isPushed = false;
+            IsPushed(false);
             collisions[gameObject] = grabbableObjectRef.itemProperties.weight;
         }
 
@@ -393,6 +397,18 @@ namespace Physics_Items.ItemPhysics
         protected virtual void Update()
         {
             collisions[gameObject] = grabbableObjectRef.itemProperties.weight;
+
+            if (isPushed && !addedWeight)
+            {
+                player.carryWeight += Mathf.Clamp(grabbableObjectRef.itemProperties.weight - 1f, 0f, 10f);
+                addedWeight = true;
+            }
+            else if (!isPushed && addedWeight)
+            {
+                player.carryWeight -= Mathf.Clamp(grabbableObjectRef.itemProperties.weight - 1f, 0f, 10f);
+                addedWeight = false;
+            }
+
             if (oldValue != NetworkUtil.ServerHasMod)
             {
                 oldValue = NetworkUtil.ServerHasMod;
@@ -413,10 +429,6 @@ namespace Physics_Items.ItemPhysics
             {
                 if (rigidbody.isKinematic && !local_PhysicsVariable.isPlaced)
                 {
-                    /*if (addedWeight)
-                    {
-                        player.carryWeight -= clampedMass;
-                    }*/
                     alreadyPickedUp = false;
                     SetPosition();
                     enabled = false;
@@ -534,6 +546,14 @@ namespace Physics_Items.ItemPhysics
             }*//*
         }*/
 
+        void OnCollisionStay(Collision collision)
+        {
+            if(collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player)
+            {
+                isPushed = true;
+            }
+        }
+
 
         public bool isPushed = false;
 
@@ -556,6 +576,13 @@ namespace Physics_Items.ItemPhysics
         {
             if (!currentContacts.Contains(_collider) && !force) return;
             currentContacts.Remove(_collider);
+            if(PhysicsUtil.GetPhysicsComponent(_collider.gameObject, out PhysicsComponent shit))
+            {
+                if (shit.isPushed)
+                {
+                    shit.isPushed = false;
+                }
+            }
             foreach (var contact in currentContacts)
             {
                 if(PhysicsUtil.GetPhysicsComponent(contact.gameObject, out PhysicsComponent comp))
@@ -631,59 +658,71 @@ namespace Physics_Items.ItemPhysics
             if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player && isPushed)
             {
                 Plugin.Logger.LogWarning("not pushed anymore");
-                isPushed = false;
-                addedWeight = false;
+                IsPushed(false);
                 current = 0f;
+                //player.carryWeight -= sum;
+                oldSum = 0f;
+            }
+        }
+
+
+        public void IsPushed(bool _isPushed) 
+        {
+            isPushed = _isPushed;
+            foreach(var a in currentContacts)
+            {
+                if(PhysicsUtil.GetPhysicsComponent(a.gameObject, out PhysicsComponent comp))
+                {
+                    comp.isPushed = _isPushed;
+                }
             }
         }
 
         // This is so scuffed
+        float sum;
+        float oldSum;
         protected virtual void OnCollisionEnter(Collision collision)
         {
-            /*Dictionary<GameObject, PhysicsComponent> test = new Dictionary<GameObject, PhysicsComponent>();
-            GetContacts(ref test);
-            foreach (var a in test)
-            {
-                Plugin.Logger.LogWarning(a.Key + ": " + a.Value.ToString());
-            }*/
             foreach (ContactPoint contact in collision.contacts)
             {
                 currentContacts.Add(contact.otherCollider);
             }
-            var test = new Dictionary<GameObject, PhysicsComponent>();
-            GetContacts(ref test);
-            foreach (var a in test)
-            {
-                Plugin.Logger.LogWarning($"\n{a.Value.grabbableObjectRef.itemProperties.itemName}");
-            }
-
-            if (collision.gameObject.layer == 26 && ConfigUtil.disablePlayerCollision.Value)
-            {
-                Physics.IgnoreCollision(collider, collision.gameObject.GetComponent<Collider>(), true);
-                isPushed = false;
-                return;
-            }
-            // Calculate the force that the player character would experience
-            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player)
-            {
-                isPushed = true;
-                Plugin.Logger.LogWarning("push started");
-            }
-            
             if (!firstHit) // So no jumpscare when items first load in xD
             {
                 firstHit = true;
                 return;
             }
+            if (player == null) return;
+            /*var test = new Dictionary<GameObject, PhysicsComponent>();
+            GetContacts(ref test);
+            foreach (var a in test)
+            {
+                Plugin.Logger.LogWarning($"\n{a.Value.grabbableObjectRef.itemProperties.itemName}");
+            }
+            sum = Mathf.Clamp(test.Sum(x => x.Value.grabbableObjectRef.itemProperties.weight) - test.Count, 0f, 10f);
+            sum = sum == 0f ? grabbableObjectRef.itemProperties.weight-1f : sum;
+            Plugin.Logger.LogWarning($"Weight: {sum}");*/
+            IgnoreCollisionCheck(collision);
+            if (isPushed && collision.gameObject.layer != 26)
+            {
+                IsPushed(true);
+                /*if(sum-oldSum != 0f)
+                {
+                    player.carryWeight += sum - oldSum;
+                    oldSum = sum;
+                    IsPushed(true);
+                }*/
+            }
+            // Calculate the force that the player character would experience
+            if (collision.gameObject.layer == 26 && GetPlayer(collision.gameObject) == player && !isPushed)
+            {
+                IsPushed(true);
+                /*player.carryWeight += sum;
+                oldSum = sum;*/
+                Plugin.Logger.LogWarning("push started");
+            }
             if (IsHostOrServer)
             {
-                /*NetworkObjectReference networkRef = networkObject;
-                FastBufferWriter writer = new FastBufferWriter(FastBufferWriter.GetWriteSize(networkRef), Unity.Collections.Allocator.Temp);
-                writer.WriteValueSafe(networkRef);
-                foreach (var client in NetworkManager.Singleton.ConnectedClientsList)
-                {
-                    NetworkManager.Singleton.CustomMessagingManager.SendNamedMessage(OnCollision.CollisionCheck, client.ClientId, writer, NetworkDelivery.ReliableSequenced);
-                }*/
                 OnCollisionClientRpc();
             }
             else if(!NetworkUtil.ServerHasMod)
@@ -694,10 +733,14 @@ namespace Physics_Items.ItemPhysics
             velocityMag = PhysicsUtil.FastInverseSqrt(velocity.sqrMagnitude);
         }
 
-        [ServerRpc]
-        void OnCollisionServerRpc() 
+        private void IgnoreCollisionCheck(Collision collision)
         {
-            OnCollisionClientRpc();
+            if (collision.gameObject.layer == 26 && ConfigUtil.disablePlayerCollision.Value)
+            {
+                Physics.IgnoreCollision(collider, collision.gameObject.GetComponent<Collider>(), true);
+                IsPushed(false);
+                return;
+            }
         }
 
         [ClientRpc]

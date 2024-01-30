@@ -69,9 +69,14 @@ namespace Physics_Items.ItemPhysics
             orig(self);
             if (!PhysicsUtil.GetPhysicsComponent(self.gameObject, out PhysicsComponent comp)) return;
             comp.alreadyPickedUp = true;
-            var newSet = new HashSet<Collider>(comp.currentContacts);
+            //var newSet = new HashSet<Collider>(comp.currentContacts);
             comp.RemoveContact(comp.collider, true);
             comp.currentContacts.Clear();
+            /*if (comp.isPushed)
+            {
+                comp.IsPushed(false);
+                //GameNetworkManager.Instance.localPlayerController.carryWeight -= Mathf.Clamp(comp.grabbableObjectRef.itemProperties.weight-1f,0f,10f);
+            }*/
             /*var keysToRemove = new List<GameObject>(comp.collisions.Keys);
             // TODO: Might have to sync this with RPCs, and place it in a different method. eg: inside physics component
             foreach (var key in keysToRemove)
